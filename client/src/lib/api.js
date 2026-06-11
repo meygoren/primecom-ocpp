@@ -31,6 +31,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getFirmwareHistory: (id) => request(`/api/chargers/${encodeURIComponent(id)}/firmware`),
   // RFID tags
   getRfidTags: () => request('/api/rfid'),
   addRfidTag: (tag, label) =>

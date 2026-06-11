@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 
-const COMMANDS = [
-  { key: 'reset', label: 'Reboot', description: 'Send a Soft reset to the charger', fields: [] },
+const ALL_COMMANDS = [
+  { key: 'reset', label: 'Reboot', description: 'Send a Soft reset to the charger', fields: [], settingKey: null },
   {
     key: 'remote-start',
     label: 'Remote Start',
@@ -11,28 +11,51 @@ const COMMANDS = [
       { name: 'connectorId', label: 'Connector ID', default: '1', type: 'number' },
       { name: 'idTag', label: 'ID Tag', default: 'PRIMECOM', type: 'text' },
     ],
+    settingKey: null,
   },
   {
     key: 'remote-stop',
     label: 'Remote Stop',
     description: 'Stop a charging session',
     fields: [{ name: 'transactionId', label: 'Transaction ID', default: '', type: 'number' }],
+    settingKey: null,
   },
   {
     key: 'get-configuration',
     label: 'Get Config',
     description: 'Read all configuration keys',
     fields: [],
+    settingKey: null,
   },
   {
     key: 'update-firmware',
     label: 'Push Firmware',
     description: 'Send a firmware update URL',
     fields: [{ name: 'location', label: 'Firmware URL', default: '', type: 'text' }],
+    settingKey: null,
+  },
+  {
+    key: 'unlock-connector',
+    label: 'Unlock Connector',
+    description: 'Unlock a stuck connector',
+    fields: [{ name: 'connectorId', label: 'Connector ID', default: '1', type: 'number' }],
+    settingKey: 'feat_unlock_connector',
+  },
+  {
+    key: 'clear-cache',
+    label: 'Clear Cache',
+    description: 'Clear the charger auth cache',
+    fields: [],
+    settingKey: 'feat_clear_cache',
   },
 ];
 
 export default function CommandPanel({ chargerId }) {
+  const COMMANDS = ALL_COMMANDS.filter((cmd) => {
+    if (!cmd.settingKey) return true;
+    return localStorage.getItem(`settings_${cmd.settingKey}`) !== 'false';
+  });
+
   const [active, setActive] = useState(null);
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(false);
