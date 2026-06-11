@@ -7,6 +7,8 @@ import ChargerDetail from './pages/ChargerDetail';
 import Sessions from './pages/Sessions';
 import Logs from './pages/Logs';
 import Login from './pages/Login';
+import RfidTags from './pages/RfidTags';
+import Settings from './pages/Settings';
 
 function Layout({ children }) {
   return (
@@ -47,6 +49,8 @@ export default function App() {
         <Route path="/charger/:id" element={<PrivateRoute session={session}><ChargerDetail /></PrivateRoute>} />
         <Route path="/sessions" element={<PrivateRoute session={session}><Sessions /></PrivateRoute>} />
         <Route path="/logs" element={<PrivateRoute session={session}><Logs /></PrivateRoute>} />
+        <Route path="/rfid" element={<PrivateRoute session={session}><RfidTags /></PrivateRoute>} />
+        <Route path="/settings" element={<PrivateRoute session={session}><Settings /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

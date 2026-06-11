@@ -1,13 +1,39 @@
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings } from 'lucide-react';
 
-const nav = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/sessions', icon: Zap, label: 'Sessions' },
-  { to: '/logs', icon: ScrollText, label: 'Logs' },
+const BASE_NAV = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', settingKey: null },
+  { to: '/sessions', icon: Zap, label: 'Sessions', settingKey: null },
+  { to: '/logs', icon: ScrollText, label: 'Logs', settingKey: null },
 ];
 
+const CONDITIONAL_NAV = [
+  { to: '/rfid', icon: CreditCard, label: 'RFID Tags', settingKey: 'nav_rfid_tags' },
+  { to: '/settings', icon: Settings, label: 'Settings', settingKey: null },
+];
+
+function getNavItems() {
+  return [
+    ...BASE_NAV,
+    ...CONDITIONAL_NAV.filter((item) => {
+      if (!item.settingKey) return true;
+      return localStorage.getItem(`settings_${item.settingKey}`) !== 'false';
+    }),
+  ];
+}
+
 export default function Sidebar() {
+  const [navItems, setNavItems] = useState(getNavItems);
+
+  useEffect(() => {
+    function onStorage() {
+      setNavItems(getNavItems());
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   return (
     <aside
       style={{
@@ -40,7 +66,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav style={{ padding: '12px 12px', flex: 1 }}>
-        {nav.map(({ to, icon: Icon, label }) => (
+        {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
