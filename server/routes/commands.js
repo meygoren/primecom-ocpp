@@ -1,0 +1,109 @@
+const express = require('express');
+const router = express.Router();
+const connections = require('../state/connections');
+const remoteStartTransaction = require('../ocpp/commands/remoteStartTransaction');
+const remoteStopTransaction = require('../ocpp/commands/remoteStopTransaction');
+const reset = require('../ocpp/commands/reset');
+const updateFirmware = require('../ocpp/commands/updateFirmware');
+const getConfiguration = require('../ocpp/commands/getConfiguration');
+const changeConfiguration = require('../ocpp/commands/changeConfiguration');
+const getDiagnostics = require('../ocpp/commands/getDiagnostics');
+
+function requireConnected(req, res, next) {
+  const { id } = req.params;
+  if (!connections.has(id)) {
+    return res.status(503).json({ error: `Charger ${id} is not currently connected` });
+  }
+  next();
+}
+
+// POST /api/commands/:id/remote-start
+router.post('/:id/remote-start', requireConnected, async (req, res) => {
+  const { connectorId, idTag } = req.body;
+  try {
+    const result = await remoteStartTransaction(req.params.id, connectorId, idTag);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/remote-stop
+router.post('/:id/remote-stop', requireConnected, async (req, res) => {
+  const { transactionId } = req.body;
+  if (!transactionId) {
+    return res.status(400).json({ error: 'transactionId is required' });
+  }
+  try {
+    const result = await remoteStopTransaction(req.params.id, transactionId);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/reset
+router.post('/:id/reset', requireConnected, async (req, res) => {
+  const { type = 'Soft' } = req.body;
+  try {
+    const result = await reset(req.params.id, type);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/update-firmware
+router.post('/:id/update-firmware', requireConnected, async (req, res) => {
+  const { location, retrieveDate } = req.body;
+  if (!location) {
+    return res.status(400).json({ error: 'location (firmware URL) is required' });
+  }
+  try {
+    const result = await updateFirmware(req.params.id, location, retrieveDate);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/get-configuration
+router.post('/:id/get-configuration', requireConnected, async (req, res) => {
+  const { keys } = req.body;
+  try {
+    const result = await getConfiguration(req.params.id, keys);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/change-configuration
+router.post('/:id/change-configuration', requireConnected, async (req, res) => {
+  const { key, value } = req.body;
+  if (!key || value === undefined) {
+    return res.status(400).json({ error: 'key and value are required' });
+  }
+  try {
+    const result = await changeConfiguration(req.params.id, key, value);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/get-diagnostics
+router.post('/:id/get-diagnostics', requireConnected, async (req, res) => {
+  const { location } = req.body;
+  if (!location) {
+    return res.status(400).json({ error: 'location (upload URL) is required' });
+  }
+  try {
+    const result = await getDiagnostics(req.params.id, location);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
