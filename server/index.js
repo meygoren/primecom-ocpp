@@ -22,7 +22,16 @@ const HEARTBEAT_CHECK_INTERVAL_MS = 30 * 1000; // check every 30 seconds
 
 // --- Express app ---
 const app = express();
-app.use(cors());
+
+// Explicit CORS — must come before all routes
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  next();
+});
+
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
