@@ -95,4 +95,16 @@ export const api = {
   getBillingSettings: () => request('/api/billing/settings'),
   saveBillingSettings: (body) => request('/api/billing/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   sendBillingReport: () => request('/api/billing/send-report', { method: 'POST' }),
+
+  // Charge trucks (used by Issues page for truck list)
+  getChargeTrucks: () => request('/api/charge-trucks'),
+
+  // Issues
+  getIssues: (query = '') => request(`/api/issues${query}`),
+  getIssueOpenCount: () => request('/api/issues/open-count'),
+  createIssue: (body) => request('/api/issues', { method: 'POST', body: JSON.stringify(body) }),
+  updateIssue: (id, body) => request(`/api/issues/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteIssue: (id) => request(`/api/issues/${id}`, { method: 'DELETE' }),
+  getIssueSettings: () => request('/api/issues/settings'),
+  saveIssueSettings: (body) => request('/api/issues/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 };

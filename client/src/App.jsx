@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import DriverDashboard from './pages/DriverDashboard';
 import ChargerDetail from './pages/ChargerDetail';
@@ -15,12 +16,16 @@ import Accounts from './pages/Accounts';
 import ChargeTrucks from './pages/ChargeTrucks';
 import EnergyForward from './pages/EnergyForward';
 import Billing from './pages/Billing';
+import Issues from './pages/Issues';
 
 function Layout({ children }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
-      <main style={{ flex: 1, overflowY: 'auto' }}>{children}</main>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <TopBar />
+        <main style={{ flex: 1, overflowY: 'auto' }}>{children}</main>
+      </div>
     </div>
   );
 }
@@ -71,6 +76,7 @@ export default function App() {
           <Route path="/charge-trucks" element={<PrivateRoute session={session}><ChargeTrucks /></PrivateRoute>} />
           <Route path="/energy-forward" element={<PrivateRoute session={session}><EnergyForward /></PrivateRoute>} />
           <Route path="/billing" element={<PrivateRoute session={session}><Billing /></PrivateRoute>} />
+          <Route path="/issues" element={<PrivateRoute session={session}><Issues /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
