@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users } from 'lucide-react';
+import { useProfile } from '../contexts/ProfileContext';
 
 const BASE_NAV = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', settingKey: null },
-  { to: '/sessions', icon: Zap, label: 'Sessions', settingKey: null },
-  { to: '/logs', icon: ScrollText, label: 'Logs', settingKey: null },
+  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null,            adminOnly: false },
+  { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null,            adminOnly: false },
+  { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null,            adminOnly: false },
 ];
 
 const CONDITIONAL_NAV = [
-  { to: '/rfid', icon: CreditCard, label: 'RFID Tags', settingKey: 'nav_rfid_tags' },
-  { to: '/settings', icon: Settings, label: 'Settings', settingKey: null },
+  { to: '/rfid',     icon: CreditCard,      label: 'RFID Tags',  settingKey: 'nav_rfid_tags', adminOnly: false },
+  { to: '/accounts', icon: Users,           label: 'Accounts',   settingKey: null,            adminOnly: true  },
+  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null,            adminOnly: false },
 ];
 
-function getNavItems() {
+function getNavItems(isAdmin) {
   return [
     ...BASE_NAV,
     ...CONDITIONAL_NAV.filter((item) => {
+      if (item.adminOnly && !isAdmin) return false;
       if (!item.settingKey) return true;
       return localStorage.getItem(`settings_${item.settingKey}`) !== 'false';
     }),
@@ -24,15 +27,20 @@ function getNavItems() {
 }
 
 export default function Sidebar() {
-  const [navItems, setNavItems] = useState(getNavItems);
+  const profile = useProfile();
+  const isAdmin = profile?.role === 'admin';
+
+  const [navItems, setNavItems] = useState(() => getNavItems(false));
 
   useEffect(() => {
-    function onStorage() {
-      setNavItems(getNavItems());
-    }
+    setNavItems(getNavItems(isAdmin));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    function onStorage() { setNavItems(getNavItems(isAdmin)); }
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  }, [isAdmin]);
 
   return (
     <aside
@@ -47,18 +55,11 @@ export default function Sidebar() {
       }}
     >
       {/* Logo */}
-      <div
-        style={{
-          padding: '20px 24px 16px',
-          borderBottom: '1px solid #2e3347',
-        }}
-      >
+      <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #2e3347' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Activity size={22} color="#47a141" />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#f1f5f9' }}>
-              Primecom
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#f1f5f9' }}>Primecom</div>
             <div style={{ fontSize: 11, color: '#8892a4' }}>OCPP Central System</div>
           </div>
         </div>
@@ -93,9 +94,12 @@ export default function Sidebar() {
       </nav>
 
       <div style={{ padding: '16px 24px', borderTop: '1px solid #2e3347' }}>
-        <div style={{ fontSize: 11, color: '#8892a4' }}>
-          Primecom Technologies LLC
-        </div>
+        {isAdmin && (
+          <div style={{ fontSize: 10, color: '#47a141', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+            Admin
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: '#8892a4' }}>Primecom Technologies LLC</div>
       </div>
     </aside>
   );

@@ -12,7 +12,8 @@ export default function Dashboard() {
 
   async function load() {
     try {
-      const data = await api.getChargers();
+      // getMyChargers returns all chargers for admins, assigned-only for regular users
+      const data = await api.getMyChargers();
       setChargers(data);
       setError(null);
     } catch (err) {
