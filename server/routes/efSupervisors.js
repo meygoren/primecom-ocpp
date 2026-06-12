@@ -80,13 +80,16 @@ router.post('/', async (req, res) => {
 // PATCH /api/ef-supervisors/:id — update supervisor
 router.patch('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, phone, email, active } = req.body;
+  const { name, phone, email, active, schedule_days, schedule_start, schedule_end } = req.body;
 
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (phone !== undefined) updates.phone = phone;
   if (email !== undefined) updates.email = email;
   if (active !== undefined) updates.active = active;
+  if (schedule_days !== undefined) updates.schedule_days = schedule_days;
+  if (schedule_start !== undefined) updates.schedule_start = schedule_start || null;
+  if (schedule_end !== undefined) updates.schedule_end = schedule_end || null;
 
   const { data, error } = await supabase
     .from('ef_supervisors')

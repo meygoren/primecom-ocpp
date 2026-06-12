@@ -1,5 +1,22 @@
 const supabase = require('../../db/supabase');
 
+function isOnShift(sup) {
+  const { schedule_days, schedule_start, schedule_end } = sup;
+  if (!schedule_days?.length && !schedule_start && !schedule_end) return true;
+
+  const now = new Date();
+  if (schedule_days?.length) {
+    if (!schedule_days.includes(now.getUTCDay())) return false;
+  }
+  if (schedule_start && schedule_end) {
+    const hh = String(now.getUTCHours()).padStart(2, '0');
+    const mm = String(now.getUTCMinutes()).padStart(2, '0');
+    const nowTime = `${hh}:${mm}`;
+    if (nowTime < schedule_start || nowTime >= schedule_end) return false;
+  }
+  return true;
+}
+
 async function handleMeterValues(chargePointId, payload) {
   const { transactionId, meterValue } = payload;
 
@@ -146,6 +163,10 @@ async function checkChargeTruckAlert(chargePointId, soc) {
 
       const { sendSms, sendEmail } = require('../services/alertService');
       for (const sup of supervisors) {
+        if (!isOnShift(sup)) {
+          console.log(`[ChargeTruck Alert] Skipped ${sup.name} — outside scheduled hours`);
+          continue;
+        }
         if (sup.phone) await sendSms(sup.phone, msg);
         if (sup.email) await sendEmail(sup.email, `SOC Alert: ${truckLabel}`, msg);
       }
