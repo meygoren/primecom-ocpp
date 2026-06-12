@@ -55,10 +55,10 @@ router.post('/users', async (req, res) => {
 
 // PATCH /api/admin/users/:id — update role or full_name
 router.patch('/users/:id', async (req, res) => {
-  const update = {};
+  const update = { id: req.params.id };
   if (req.body.role !== undefined) update.role = req.body.role;
   if (req.body.full_name !== undefined) update.full_name = req.body.full_name;
-  const { error } = await supabase.from('profiles').update(update).eq('id', req.params.id);
+  const { error } = await supabase.from('profiles').upsert(update);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
