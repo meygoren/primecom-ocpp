@@ -31,4 +31,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getFirmwareHistory: (id) => request(`/api/chargers/${encodeURIComponent(id)}/firmware`),
+  // RFID tags
+  getRfidTags: () => request('/api/rfid'),
+  addRfidTag: (tag, label) =>
+    request('/api/rfid', {
+      method: 'POST',
+      body: JSON.stringify({ tag, label }),
+    }),
+  deleteRfidTag: (tag) =>
+    request(`/api/rfid/${encodeURIComponent(tag)}`, { method: 'DELETE' }),
 };

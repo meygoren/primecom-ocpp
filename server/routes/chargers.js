@@ -23,6 +23,19 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
+// GET /api/chargers/:id/firmware — firmware update history
+router.get('/:id/firmware', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('firmware_updates')
+    .select('*')
+    .eq('charger_id', id)
+    .order('requested_at', { ascending: false })
+    .limit(20);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // GET /api/chargers/:id — single charger detail
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

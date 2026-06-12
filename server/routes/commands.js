@@ -8,6 +8,8 @@ const updateFirmware = require('../ocpp/commands/updateFirmware');
 const getConfiguration = require('../ocpp/commands/getConfiguration');
 const changeConfiguration = require('../ocpp/commands/changeConfiguration');
 const getDiagnostics = require('../ocpp/commands/getDiagnostics');
+const unlockConnector = require('../ocpp/commands/unlockConnector');
+const clearCache = require('../ocpp/commands/clearCache');
 
 function requireConnected(req, res, next) {
   const { id } = req.params;
@@ -100,6 +102,27 @@ router.post('/:id/get-diagnostics', requireConnected, async (req, res) => {
   }
   try {
     const result = await getDiagnostics(req.params.id, location);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/unlock-connector
+router.post('/:id/unlock-connector', requireConnected, async (req, res) => {
+  const { connectorId = 1 } = req.body;
+  try {
+    const result = await unlockConnector(req.params.id, connectorId);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/clear-cache
+router.post('/:id/clear-cache', requireConnected, async (req, res) => {
+  try {
+    const result = await clearCache(req.params.id);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });

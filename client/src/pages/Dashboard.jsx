@@ -6,6 +6,9 @@ export default function Dashboard() {
   const [chargers, setChargers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const showFilter = localStorage.getItem('settings_feat_status_filter') !== 'false';
 
   async function load() {
     try {
@@ -33,18 +36,48 @@ export default function Dashboard() {
     offline: chargers.filter((c) => c.status === 'offline').length,
   };
 
+  const filteredChargers = statusFilter === 'all'
+    ? chargers
+    : chargers.filter((c) => c.status === statusFilter);
+
   if (loading) return <PageShell><div style={{ color: '#8892a4', padding: 40 }}>Loading chargers...</div></PageShell>;
   if (error) return <PageShell><div style={{ color: '#ef4444', padding: 40 }}>{error}</div></PageShell>;
 
   return (
     <PageShell>
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <StatCard label="Total Chargers" value={counts.total} color="#f1f5f9" />
         <StatCard label="Online" value={counts.online} color="#47a141" />
         <StatCard label="Charging" value={counts.charging} color="#3b82f6" />
         <StatCard label="Faulted" value={counts.faulted} color="#ef4444" />
       </div>
+
+      {/* Status filter */}
+      {showFilter && chargers.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+          <span style={{ fontSize: 13, color: '#8892a4' }}>Filter:</span>
+          {['all', 'online', 'charging', 'faulted', 'offline'].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              style={{
+                background: statusFilter === s ? '#2d5c2a33' : '#22263a',
+                border: `1px solid ${statusFilter === s ? '#47a141' : '#2e3347'}`,
+                borderRadius: 6,
+                padding: '5px 14px',
+                color: statusFilter === s ? '#47a141' : '#8892a4',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+              }}
+            >
+              {s === 'all' ? `All (${counts.total})` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${counts[s] ?? 0})`}
+            </button>
+          ))}
+        </div>
+      )}
 
       {chargers.length === 0 ? (
         <div
@@ -59,12 +92,29 @@ export default function Dashboard() {
         >
           <div style={{ fontSize: 16, marginBottom: 8 }}>No chargers connected yet</div>
           <div style={{ fontSize: 13 }}>
-            Point your charger to: <code style={{ background: '#22263a', padding: '2px 8px', borderRadius: 4, color: '#47a141' }}>wss://your-server/ocpp/CHARGER-ID</code>
+            Point your charger to:{' '}
+            <code style={{ background: '#22263a', padding: '2px 8px', borderRadius: 4, color: '#47a141' }}>
+              wss://primecom-ocpp-production.up.railway.app/ocpp/CHARGER-ID
+            </code>
           </div>
+        </div>
+      ) : filteredChargers.length === 0 ? (
+        <div
+          style={{
+            background: '#1a1d27',
+            border: '1px solid #2e3347',
+            borderRadius: 12,
+            padding: '40px',
+            textAlign: 'center',
+            color: '#8892a4',
+            fontSize: 14,
+          }}
+        >
+          No chargers match the selected filter.
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {chargers.map((c) => (
+          {filteredChargers.map((c) => (
             <ChargerCard key={c.charger_id} charger={c} />
           ))}
         </div>
