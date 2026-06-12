@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
+const { predictTimeToFull } = require('../services/socPredictor');
 
 // Helper: fetch live OCPP data for a given charger ID
 async function getLiveData(ocppId) {
@@ -67,6 +68,17 @@ async function getLiveData(ocppId) {
     },
   ];
 
+  // Predict time to 100% when actively charging with a known SOC
+  let eta = null;
+  const isCharging = charger?.status === 'charging' || activeSessions.length > 0;
+  if (isCharging && soc !== null && soc < 100) {
+    try {
+      eta = await predictTimeToFull(ocppId, parseFloat(soc), power_kw);
+    } catch (err) {
+      console.error(`[Predictor] Error for ${ocppId}:`, err.message);
+    }
+  }
+
   return {
     ocpp_id: ocppId,
     soc,
@@ -74,6 +86,8 @@ async function getLiveData(ocppId) {
     status: charger?.status || 'offline',
     last_heartbeat: charger?.last_heartbeat || null,
     connectors,
+    eta_minutes: eta?.minutes ?? null,
+    eta_confidence: eta?.confidence ?? null,
   };
 }
 
