@@ -12,6 +12,8 @@ import Login from './pages/Login';
 import RfidTags from './pages/RfidTags';
 import Settings from './pages/Settings';
 import Accounts from './pages/Accounts';
+import ChargeTrucks from './pages/ChargeTrucks';
+import EnergyForward from './pages/EnergyForward';
 
 function Layout({ children }) {
   return (
@@ -65,6 +67,8 @@ export default function App() {
           <Route path="/rfid" element={<PrivateRoute session={session}><RfidTags /></PrivateRoute>} />
           <Route path="/settings" element={<PrivateRoute session={session}><Settings /></PrivateRoute>} />
           <Route path="/accounts" element={<PrivateRoute session={session}><Accounts /></PrivateRoute>} />
+          <Route path="/charge-trucks" element={<PrivateRoute session={session}><ChargeTrucks /></PrivateRoute>} />
+          <Route path="/energy-forward" element={<PrivateRoute session={session}><EnergyForward /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

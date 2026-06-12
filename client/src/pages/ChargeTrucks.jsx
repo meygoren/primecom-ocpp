@@ -1,0 +1,444 @@
+import { useState, useEffect, useCallback } from 'react';
+import { RefreshCw, ChevronDown, ChevronUp, Truck, Users, Plus, Trash2 } from 'lucide-react';
+import { api } from '../lib/api';
+import { useProfile } from '../contexts/ProfileContext';
+
+const STATUS_COLOR  = { online: '#47a141', charging: '#3b82f6', faulted: '#ef4444', offline: '#6b7280' };
+const STATUS_BG     = { online: '#1a3a1a', charging: '#1a2540', faulted: '#3f1515', offline: '#22263a' };
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function truckStatus(live) {
+  const units = [live?.passenger?.unit_1, live?.passenger?.unit_2, live?.driver?.unit_1, live?.driver?.unit_2];
+  if (units.some((u) => u?.status === 'charging'))  return 'charging';
+  if (units.some((u) => u?.status === 'faulted'))   return 'faulted';
+  if (units.some((u) => u?.status === 'online'))    return 'online';
+  return 'offline';
+}
+
+function sideSoc(live, side) {
+  const socs = [live?.[side]?.unit_1?.soc, live?.[side]?.unit_2?.soc].filter((v) => v != null);
+  return socs.length ? socs.reduce((a, b) => a + b, 0) / socs.length : null;
+}
+
+function sidePower(live, side) {
+  return (live?.[side]?.unit_1?.power_kw || 0) + (live?.[side]?.unit_2?.power_kw || 0);
+}
+
+// ─── SocBar ───────────────────────────────────────────────────────────────────
+
+function SocBar({ soc }) {
+  const color = soc == null ? '#6b7280' : soc >= 80 ? '#47a141' : soc >= 20 ? '#3b82f6' : '#f59e0b';
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+        <span style={{ fontSize: 11, color: '#8892a4' }}>SOC</span>
+        <span style={{ fontSize: 22, fontWeight: 700, color }}>{soc != null ? `${Math.round(soc)}%` : '—'}</span>
+      </div>
+      <div style={{ background: '#22263a', borderRadius: 5, height: 10 }}>
+        <div style={{ height: '100%', width: `${Math.min(soc ?? 0, 100)}%`, background: color, borderRadius: 5, transition: 'width 0.5s' }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── SidePanel ────────────────────────────────────────────────────────────────
+
+function SidePanel({ truck, side, label }) {
+  const isCompact = truck.truck_type === 'compact';
+  const pfx = side === 'passenger' ? 'p' : 'd';
+  const configured = !!truck[`${pfx}_ocpp_1`];
+  const unit1 = truck.live?.[side]?.unit_1;
+  const unit2 = truck.live?.[side]?.unit_2;
+  const soc   = sideSoc(truck.live, side);
+  const power = sidePower(truck.live, side);
+
+  // cables: unit1 = A,B (connectors 1,2); unit2 = C,D (connectors 1,2)
+  const cables = [
+    { label: 'A', unit: unit1, conn: 1 },
+    { label: 'B', unit: unit1, conn: 2 },
+    ...(isCompact ? [] : [
+      { label: 'C', unit: unit2, conn: 1 },
+      { label: 'D', unit: unit2, conn: 2 },
+    ]),
+  ];
+
+  return (
+    <div style={{ padding: '16px 18px' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#8892a4', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 14 }}>
+        {label} Side
+      </div>
+
+      {!configured ? (
+        <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic', paddingTop: 6 }}>
+          Not configured — set OCPP IDs in Settings
+        </div>
+      ) : (
+        <>
+          <SocBar soc={soc} />
+
+          <div style={{ marginTop: 12, fontSize: 13, fontWeight: 600, color: power > 0 ? '#f1f5f9' : '#6b7280' }}>
+            {power > 0 ? `${power.toFixed(1)} kW` : 'No output'}
+          </div>
+
+          <div style={{ display: 'flex', gap: 5, marginTop: 10 }}>
+            {cables.map((c) => {
+              const active  = c.unit?.connectors?.find((x) => x.connector_id === c.conn)?.active;
+              const status  = c.unit?.status;
+              const color   = active ? '#3b82f6' : status === 'faulted' ? '#ef4444' : status === 'online' ? '#47a141' : '#6b7280';
+              const bg      = active ? '#1a2540' : STATUS_BG[status] || '#22263a';
+              return (
+                <div
+                  key={c.label}
+                  title={`Cable ${c.label}: ${active ? 'Active session' : status || 'offline'}`}
+                  style={{
+                    width: 30, height: 30, borderRadius: 6, background: bg, border: `1px solid ${color}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 10, fontWeight: 700, color,
+                  }}
+                >
+                  {c.label}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── TruckCard ────────────────────────────────────────────────────────────────
+
+function TruckCard({ truck }) {
+  const status = truckStatus(truck.live);
+  const borderColor = STATUS_COLOR[status] + '55';
+
+  return (
+    <div style={{ background: '#1a1d27', border: `1px solid ${borderColor}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>{truck.label || `Truck ${truck.truck_number}`}</div>
+          <div style={{ fontSize: 11, color: '#8892a4', marginTop: 2 }}>
+            {truck.truck_type === 'compact' ? '4-cable · 2 boards' : '8-cable · 4 boards'} · 450 kWh
+          </div>
+        </div>
+        <span style={{ background: STATUS_BG[status], border: `1px solid ${STATUS_COLOR[status]}`, color: STATUS_COLOR[status], borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
+          {status}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+        <SidePanel truck={truck} side="passenger" label="Passenger" />
+        <div style={{ borderLeft: '1px solid #2e3347' }}>
+          <SidePanel truck={truck} side="driver" label="Driver" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SettingsTab ──────────────────────────────────────────────────────────────
+
+function SettingsTab({ trucks, onRefresh }) {
+  const [expanded, setExpanded] = useState(null);
+  const [saving, setSaving]     = useState(null);
+  const [form, setForm]         = useState({});
+
+  const [supervisors, setSupervisors]   = useState([]);
+  const [loadingSup, setLoadingSup]     = useState(true);
+  const [newSup, setNewSup]             = useState({ name: '', phone: '', email: '' });
+  const [addingSup, setAddingSup]       = useState(false);
+
+  useEffect(() => {
+    api.getEfSupervisors()
+      .then((d) => setSupervisors(d))
+      .finally(() => setLoadingSup(false));
+  }, []);
+
+  function openTruck(truck) {
+    setExpanded(truck.id);
+    setForm({
+      label: truck.label || '',
+      p_ocpp_1: truck.p_ocpp_1 || '',
+      p_ocpp_2: truck.p_ocpp_2 || '',
+      d_ocpp_1: truck.d_ocpp_1 || '',
+      d_ocpp_2: truck.d_ocpp_2 || '',
+      soc_alert_threshold: truck.soc_alert_threshold ?? 80,
+      notes: truck.notes || '',
+    });
+  }
+
+  async function saveTruck(truck) {
+    setSaving(truck.id);
+    try {
+      await api.updateChargeTruck(truck.id, form);
+      await onRefresh();
+      setExpanded(null);
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function addSupervisor() {
+    if (!newSup.name.trim()) return;
+    setAddingSup(true);
+    try {
+      const d = await api.addEfSupervisor(newSup);
+      setSupervisors((p) => [...p, d]);
+      setNewSup({ name: '', phone: '', email: '' });
+    } catch (err) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setAddingSup(false);
+    }
+  }
+
+  async function toggleActive(sup) {
+    const updated = await api.updateEfSupervisor(sup.id, { active: !sup.active });
+    setSupervisors((p) => p.map((s) => (s.id === sup.id ? updated : s)));
+  }
+
+  async function removeSupervisor(id) {
+    await api.deleteEfSupervisor(id);
+    setSupervisors((p) => p.filter((s) => s.id !== id));
+  }
+
+  const inp = { width: '100%', background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '8px 12px', color: '#f1f5f9', fontSize: 12, outline: 'none', boxSizing: 'border-box' };
+  const lbl = { fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+      {/* Left: truck OCPP config */}
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>OCPP ID Configuration</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {trucks.map((truck) => (
+            <div key={truck.id} style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 10, overflow: 'hidden' }}>
+              <div
+                onClick={() => expanded === truck.id ? setExpanded(null) : openTruck(truck)}
+                style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 14 }}>{truck.label || `Truck ${truck.truck_number}`}</span>
+                  <span style={{ fontSize: 10, color: '#8892a4', background: '#22263a', borderRadius: 4, padding: '2px 7px' }}>{truck.truck_type === 'compact' ? '4-cable' : '8-cable'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 11, color: truck.p_ocpp_1 ? '#47a141' : '#6b7280' }}>{truck.p_ocpp_1 ? 'Configured' : 'Not configured'}</span>
+                  {expanded === truck.id ? <ChevronUp size={14} color="#8892a4" /> : <ChevronDown size={14} color="#8892a4" />}
+                </div>
+              </div>
+
+              {expanded === truck.id && (
+                <div style={{ padding: '0 18px 18px', borderTop: '1px solid #2e3347' }}>
+                  <div style={{ paddingTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                    <div>
+                      <label style={lbl}>Label</label>
+                      <input style={inp} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder={`Truck ${truck.truck_number}`} />
+                    </div>
+                    <div>
+                      <label style={lbl}>SOC Alert Threshold (%)</label>
+                      <input style={inp} type="number" min={50} max={100} value={form.soc_alert_threshold} onChange={(e) => setForm({ ...form, soc_alert_threshold: Number(e.target.value) })} />
+                    </div>
+                  </div>
+
+                  {['passenger', 'driver'].map((side) => {
+                    const pfx = side === 'passenger' ? 'p' : 'd';
+                    return (
+                      <div key={side} style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, color: '#8892a4', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                          {side === 'passenger' ? 'Passenger' : 'Driver'} Side OCPP IDs
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: truck.truck_type === 'compact' ? '1fr' : '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={lbl}>Board 1 (Cables A &amp; B)</label>
+                            <input style={inp} value={form[`${pfx}_ocpp_1`]} onChange={(e) => setForm({ ...form, [`${pfx}_ocpp_1`]: e.target.value })} placeholder="e.g. T1P-BOARD1" />
+                          </div>
+                          {truck.truck_type === 'standard' && (
+                            <div>
+                              <label style={lbl}>Board 2 (Cables C &amp; D)</label>
+                              <input style={inp} value={form[`${pfx}_ocpp_2`]} onChange={(e) => setForm({ ...form, [`${pfx}_ocpp_2`]: e.target.value })} placeholder="e.g. T1P-BOARD2" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={lbl}>Notes</label>
+                    <input style={inp} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional notes..." />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => saveTruck(truck)} disabled={saving === truck.id} style={{ background: saving === truck.id ? '#22263a' : '#47a141', border: 'none', borderRadius: 7, padding: '8px 18px', color: saving === truck.id ? '#8892a4' : '#fff', fontWeight: 700, fontSize: 12, cursor: saving === truck.id ? 'not-allowed' : 'pointer' }}>
+                      {saving === truck.id ? 'Saving...' : 'Save'}
+                    </button>
+                    <button onClick={() => setExpanded(null)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '8px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Right: supervisors */}
+      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2e3347' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Users size={14} /> SOC Alert Supervisors
+          </div>
+          <div style={{ fontSize: 11, color: '#8892a4', marginTop: 3 }}>Receive SMS + email when a truck hits its SOC threshold</div>
+        </div>
+
+        {/* Add form */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #2e3347', background: '#1e2535' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <input style={inp} placeholder="Name *" value={newSup.name} onChange={(e) => setNewSup({ ...newSup, name: e.target.value })} />
+            <input style={inp} placeholder="Phone (+14081234567)" value={newSup.phone} onChange={(e) => setNewSup({ ...newSup, phone: e.target.value })} />
+            <input style={inp} placeholder="Email" value={newSup.email} onChange={(e) => setNewSup({ ...newSup, email: e.target.value })} />
+            <button
+              onClick={addSupervisor}
+              disabled={addingSup || !newSup.name.trim()}
+              style={{ background: !newSup.name.trim() ? '#22263a' : '#47a141', border: 'none', borderRadius: 7, padding: '8px 0', color: !newSup.name.trim() ? '#6b7280' : '#fff', fontWeight: 700, fontSize: 12, cursor: !newSup.name.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <Plus size={12} /> Add Supervisor
+            </button>
+          </div>
+        </div>
+
+        {/* List */}
+        {loadingSup ? (
+          <div style={{ padding: 24, color: '#8892a4', fontSize: 12 }}>Loading...</div>
+        ) : supervisors.length === 0 ? (
+          <div style={{ padding: 24, color: '#8892a4', fontSize: 12, textAlign: 'center' }}>No supervisors added yet.</div>
+        ) : (
+          supervisors.map((sup) => (
+            <div key={sup.id} style={{ padding: '12px 20px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
+                {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
+                {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
+                  {sup.active ? 'Active' : 'Off'}
+                </button>
+                <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                  <Trash2 size={13} color="#ef4444" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function ChargeTrucks() {
+  const [trucks, setTrucks]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
+  const [tab, setTab]             = useState('fleet');
+  const [lastUpdated, setLast]    = useState(null);
+  const profile = useProfile();
+  const isAdmin = profile?.role === 'admin';
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.getChargeTrucks();
+      setTrucks(data);
+      setLast(new Date());
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const totalOnline  = trucks.filter((t) => ['online', 'charging'].includes(truckStatus(t.live))).length;
+  const totalCharging = trucks.filter((t) => truckStatus(t.live) === 'charging').length;
+  const totalKw      = trucks.reduce((sum, t) => sum + sidePower(t.live, 'passenger') + sidePower(t.live, 'driver'), 0);
+
+  if (loading) return <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading fleet data...</div>;
+
+  return (
+    <div style={{ padding: '32px 36px', maxWidth: 1280 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Truck size={20} color="#47a141" /> Charge Trucks
+          </h1>
+          <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Mobile energy fleet · refreshes every 30 s</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {lastUpdated && <span style={{ fontSize: 11, color: '#8892a4' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
+          <button onClick={load} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 12px', color: '#8892a4', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <RefreshCw size={12} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+        {[
+          { label: 'Total Trucks',   value: trucks.length,  color: '#f1f5f9' },
+          { label: 'Online',         value: totalOnline,    color: '#47a141' },
+          { label: 'Charging',       value: totalCharging,  color: '#3b82f6' },
+          { label: 'Total Output',   value: `${totalKw.toFixed(1)} kW`, color: '#f59e0b' },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: '18px 22px' }}>
+            <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 6 }}>{label}</div>
+            <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #2e3347', marginBottom: 24 }}>
+        {[['fleet', 'Fleet Overview'], ...(isAdmin ? [['settings', 'Settings & OCPP Config']] : [])].map(([key, lbl]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? '#47a141' : 'transparent'}`, padding: '8px 16px', marginBottom: -1, color: tab === key ? '#47a141' : '#8892a4', fontSize: 13, fontWeight: tab === key ? 700 : 400, cursor: 'pointer' }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div style={{ background: '#3f1515', border: '1px solid #ef4444', borderRadius: 8, padding: '12px 16px', color: '#ef4444', fontSize: 13, marginBottom: 16 }}>{error}</div>
+      )}
+
+      {tab === 'fleet' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(560px, 1fr))', gap: 16 }}>
+          {trucks.map((truck) => <TruckCard key={truck.id} truck={truck} />)}
+          {trucks.length === 0 && (
+            <div style={{ gridColumn: '1/-1', padding: 60, textAlign: 'center', color: '#8892a4', background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12 }}>
+              No trucks found. Run the SQL setup in Supabase to create the fleet.
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'settings' && isAdmin && (
+        <SettingsTab trucks={trucks} onRefresh={load} />
+      )}
+    </div>
+  );
+}

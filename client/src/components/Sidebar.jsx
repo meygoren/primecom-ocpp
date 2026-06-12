@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 
@@ -8,8 +8,10 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
   { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null },
   { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null },
-  { to: '/rfid',     icon: CreditCard,      label: 'RFID Tags',  settingKey: 'nav_rfid_tags' },
-  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null },
+  { to: '/rfid',           icon: CreditCard,      label: 'RFID Tags',      settingKey: 'nav_rfid_tags' },
+  { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
+  { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
+  { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 
 const ADMIN_ONLY_NAV = [
@@ -17,10 +19,12 @@ const ADMIN_ONLY_NAV = [
 ];
 
 const VIEWER_NAV = [
-  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
-  { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null },
-  { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null },
-  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null },
+  { to: '/',               icon: LayoutDashboard, label: 'Dashboard',      settingKey: null },
+  { to: '/sessions',       icon: Zap,             label: 'Sessions',       settingKey: null },
+  { to: '/logs',           icon: ScrollText,      label: 'Logs',           settingKey: null },
+  { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
+  { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
+  { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 
 const DRIVER_NAV = [
