@@ -32,11 +32,22 @@ router.post('/test-sms', async (req, res) => {
 
   const { sendSms } = require('../services/alertService');
   const msg = 'Primecom OCPP — Test alert: SMS notifications are working correctly.';
-  let sent = 0;
+  const results = [];
   for (const sup of supervisors) {
-    if (sup.phone) { await sendSms(sup.phone, msg); sent++; }
+    if (!sup.phone) continue;
+    try {
+      await sendSms(sup.phone, msg);
+      results.push({ name: sup.name, ok: true });
+    } catch (err) {
+      console.error(`[TestSMS] Failed for ${sup.name}:`, err.message);
+      results.push({ name: sup.name, ok: false, error: err.message });
+    }
   }
-  res.json({ ok: true, sent, recipients: supervisors.filter((s) => s.phone).map((s) => s.name) });
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length > 0) {
+    return res.status(500).json({ error: `Send failed for: ${failed.map((r) => `${r.name} (${r.error})`).join('; ')}` });
+  }
+  res.json({ ok: true, sent: results.length, recipients: results.map((r) => r.name) });
 });
 
 // GET /api/ef-supervisors — list all supervisors
