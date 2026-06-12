@@ -65,6 +65,21 @@ export const api = {
   getNotificationPrefs: () => request('/api/notifications/preferences'),
   setNotificationPrefs: (body) => request('/api/notifications/preferences', { method: 'PUT', body: JSON.stringify(body) }),
 
+  // Charge Trucks
+  getChargeTrucks: () => request('/api/charge-trucks'),
+  updateChargeTruck: (id, body) => request(`/api/charge-trucks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  getWarehouseChargers: () => request('/api/charge-trucks/warehouse'),
+  updateWarehouseCharger: (id, body) => request(`/api/charge-trucks/warehouse/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // EF Supervisors
+  getEfSupervisors: () => request('/api/ef-supervisors'),
+  addEfSupervisor: (body) => request('/api/ef-supervisors', { method: 'POST', body: JSON.stringify(body) }),
+  updateEfSupervisor: (id, body) => request(`/api/ef-supervisors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteEfSupervisor: (id) => request(`/api/ef-supervisors/${id}`, { method: 'DELETE' }),
+  getEfSettings: () => request('/api/ef-supervisors/settings'),
+  saveEfSettings: (body) => request('/api/ef-supervisors/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  sendTestSms: () => request('/api/ef-supervisors/test-sms', { method: 'POST' }),
+
   // Admin — user management
   adminGetUsers: () => request('/api/admin/users'),
   adminCreateUser: (body) => request('/api/admin/users', { method: 'POST', body: JSON.stringify(body) }),

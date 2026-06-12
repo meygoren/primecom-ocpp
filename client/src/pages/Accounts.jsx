@@ -38,6 +38,10 @@ export default function Accounts() {
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignSaved, setAssignSaved] = useState(false);
 
+  // Pending role changes: { [userId]: newRole }
+  const [pendingRoles, setPendingRoles] = useState({});
+  const [savingRole, setSavingRole] = useState(null);
+
   // Create user form
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -117,13 +121,19 @@ export default function Accounts() {
     }
   }
 
-  async function changeRole(user, newRole) {
+  async function saveRole(user) {
+    const newRole = pendingRoles[user.id];
+    if (!newRole || newRole === user.role) return;
+    setSavingRole(user.id);
     try {
       await api.adminUpdateUser(user.id, { role: newRole });
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: newRole } : u));
       if (selectedUser?.id === user.id) setSelectedUser((prev) => ({ ...prev, role: newRole }));
+      setPendingRoles((prev) => { const n = { ...prev }; delete n[user.id]; return n; });
     } catch (err) {
       alert('Failed to update role: ' + err.message);
+    } finally {
+      setSavingRole(null);
     }
   }
 
@@ -243,17 +253,34 @@ export default function Accounts() {
                     <td style={{ padding: '12px 16px' }}><RoleBadge role={u.role} /></td>
                     <td style={{ padding: '12px 16px', color: '#8892a4' }}>{formatDateTime(u.created_at)}</td>
                     <td style={{ padding: '12px 16px' }} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <select
-                          value={u.role}
-                          onChange={(e) => changeRole(u, e.target.value)}
+                          value={pendingRoles[u.id] ?? u.role}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            const val = e.target.value;
+                            if (val === u.role) {
+                              setPendingRoles((p) => { const n = { ...p }; delete n[u.id]; return n; });
+                            } else {
+                              setPendingRoles((p) => ({ ...p, [u.id]: val }));
+                            }
+                          }}
                           onClick={(e) => e.stopPropagation()}
-                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '5px 8px', color: '#8892a4', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                          style={{ background: '#22263a', border: `1px solid ${pendingRoles[u.id] ? '#f59e0b' : '#2e3347'}`, borderRadius: 6, padding: '5px 8px', color: pendingRoles[u.id] ? '#f59e0b' : '#8892a4', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                         >
                           {ROLE_OPTIONS.map((r) => (
                             <option key={r.value} value={r.value}>{r.label}</option>
                           ))}
                         </select>
+                        {pendingRoles[u.id] && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); saveRole(u); }}
+                            disabled={savingRole === u.id}
+                            style={{ background: '#47a141', border: 'none', borderRadius: 6, padding: '5px 10px', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            {savingRole === u.id ? '...' : 'Save'}
+                          </button>
+                        )}
                         {deletingId === u.id ? (
                           <>
                             <button onClick={() => deleteUser(u.id)} style={{ background: '#3f1515', border: '1px solid #ef4444', borderRadius: 6, padding: '5px 10px', color: '#ef4444', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
