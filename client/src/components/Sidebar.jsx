@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
+import { supabase } from '../lib/supabase';
 
 const ADMIN_OPERATOR_NAV = [
   { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
@@ -126,7 +127,27 @@ export default function Sidebar() {
             {roleInfo.label}
           </div>
         )}
-        <div style={{ fontSize: 11, color: '#8892a4' }}>Primecom Technologies LLC</div>
+        <div style={{ fontSize: 11, color: '#8892a4', marginBottom: 12 }}>Primecom Technologies LLC</div>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'none',
+            border: '1px solid #2e3347',
+            borderRadius: 7,
+            padding: '7px 12px',
+            color: '#8892a4',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            width: '100%',
+          }}
+        >
+          <LogOut size={13} />
+          Sign Out
+        </button>
       </div>
     </aside>
   );

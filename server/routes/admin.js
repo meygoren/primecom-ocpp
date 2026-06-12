@@ -7,17 +7,31 @@ router.use(requireAdmin);
 
 // GET /api/admin/users
 router.get('/users', async (req, res) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('created_at');
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  // Pull all auth users so newly created users always appear even without a profile row
+  const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  if (authError) return res.status(500).json({ error: authError.message });
+
+  const { data: profiles } = await supabase.from('profiles').select('*');
+  const profileMap = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+
+  const merged = authUsers.map((u) => {
+    const p = profileMap[u.id] || {};
+    return {
+      id: u.id,
+      email: u.email,
+      full_name: p.full_name || u.user_metadata?.full_name || '',
+      role: p.role || 'viewer',
+      created_at: u.created_at,
+    };
+  });
+
+  merged.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  res.json(merged);
 });
 
 // POST /api/admin/users — create a new user
 router.post('/users', async (req, res) => {
-  const { email, password, full_name, role = 'user' } = req.body;
+  const { email, password, full_name, role = 'viewer' } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
   const { data: { user }, error } = await supabase.auth.admin.createUser({
