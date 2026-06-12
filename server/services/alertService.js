@@ -9,17 +9,21 @@ if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
 
+function toE164(number) {
+  const digits = String(number).replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  return `+${digits}`;
+}
+
 async function sendSms(to, body) {
   if (!twilioClient || !process.env.TWILIO_FROM_NUMBER) {
     console.log(`[Alert] SMS skipped (not configured): ${body}`);
     return;
   }
-  try {
-    await twilioClient.messages.create({ body, from: process.env.TWILIO_FROM_NUMBER, to });
-    console.log(`[Alert] SMS sent to ${to}`);
-  } catch (err) {
-    console.error(`[Alert] SMS error:`, err.message);
-  }
+  const normalized = toE164(to);
+  await twilioClient.messages.create({ body, from: process.env.TWILIO_FROM_NUMBER, to: normalized });
+  console.log(`[Alert] SMS sent to ${normalized}`);
 }
 
 async function sendEmail(to, subject, text) {
