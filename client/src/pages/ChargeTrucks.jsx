@@ -623,6 +623,58 @@ function SettingsTab({ trucks, onRefresh }) {
   );
 }
 
+// ─── Demo data for test mode ──────────────────────────────────────────────────
+
+function getDemoTrucks(tick) {
+  const t = tick * 0.4;
+  const TRUCKS = [
+    { n: 1, type: 'standard', baseSocs: { p1: 72, p2: 68, d1: 85, d2: 82 } },
+    { n: 2, type: 'standard', baseSocs: { p1: 55, p2: 51, d1: 43, d2: 47 } },
+    { n: 3, type: 'standard', baseSocs: { p1: 91, p2: 88, d1: 78, d2: 74 } },
+    { n: 4, type: 'compact',  baseSocs: { p1: 33, p2: null, d1: 62, d2: null } },
+    { n: 5, type: 'compact',  baseSocs: { p1: 64, p2: null, d1: 29, d2: null } },
+    { n: 6, type: 'standard', baseSocs: { p1: 48, p2: 44, d1: 57, d2: 53 } },
+  ];
+
+  function unit(baseSoc, phase, hasUnit) {
+    if (!hasUnit || baseSoc === null) return null;
+    const soc = Math.min(97, Math.max(5, baseSoc + Math.sin(t + phase) * 3.5));
+    const kw  = 148 + Math.sin(t * 1.3 + phase) * 9 + Math.cos(t * 0.8 + phase) * 5;
+    return {
+      status: 'charging',
+      soc,
+      power_kw: kw,
+      connectors: [{ connector_id: 1, active: true }, { connector_id: 2, active: true }],
+    };
+  }
+
+  return TRUCKS.map(({ n, type, baseSocs }, i) => {
+    const isCompact = type === 'compact';
+    const ph = i * 0.9;
+    return {
+      id: `demo-truck-${n}`,
+      truck_number: n,
+      truck_type: type,
+      label: `Truck ${n}`,
+      p_ocpp_1: `T${n}P-BOARD1`,
+      p_ocpp_2: isCompact ? null : `T${n}P-BOARD2`,
+      d_ocpp_1: `T${n}D-BOARD1`,
+      d_ocpp_2: isCompact ? null : `T${n}D-BOARD2`,
+      soc_alert_threshold: 80,
+      live: {
+        passenger: {
+          unit_1: unit(baseSocs.p1, ph,       true),
+          unit_2: unit(baseSocs.p2, ph + 0.4, !isCompact),
+        },
+        driver: {
+          unit_1: unit(baseSocs.d1, ph + 0.7, true),
+          unit_2: unit(baseSocs.d2, ph + 1.1, !isCompact),
+        },
+      },
+    };
+  });
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ChargeTrucks() {
@@ -631,6 +683,8 @@ export default function ChargeTrucks() {
   const [error, setError]         = useState(null);
   const [tab, setTab]             = useState('fleet');
   const [lastUpdated, setLast]    = useState(null);
+  const [testMode, setTestMode]   = useState(false);
+  const [demoTick, setDemoTick]   = useState(0);
   const profile = useProfile();
   const isAdmin = profile?.role === 'admin';
 
@@ -653,14 +707,29 @@ export default function ChargeTrucks() {
     return () => clearInterval(t);
   }, [load]);
 
-  const totalOnline  = trucks.filter((t) => ['online', 'charging'].includes(truckStatus(t.live))).length;
-  const totalCharging = trucks.filter((t) => truckStatus(t.live) === 'charging').length;
-  const totalKw      = trucks.reduce((sum, t) => sum + sidePower(t.live, 'passenger') + sidePower(t.live, 'driver'), 0);
+  useEffect(() => {
+    if (!testMode) return;
+    const iv = setInterval(() => setDemoTick((t) => t + 1), 1800);
+    return () => clearInterval(iv);
+  }, [testMode]);
 
-  if (loading) return <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading fleet data...</div>;
+  const displayTrucks = testMode ? getDemoTrucks(demoTick) : trucks;
+  const totalOnline   = displayTrucks.filter((t) => ['online', 'charging'].includes(truckStatus(t.live))).length;
+  const totalCharging = displayTrucks.filter((t) => truckStatus(t.live) === 'charging').length;
+  const totalKw       = displayTrucks.reduce((sum, t) => sum + sidePower(t.live, 'passenger') + sidePower(t.live, 'driver'), 0);
+
+  if (loading && !testMode) return <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading fleet data...</div>;
 
   return (
     <div style={{ padding: '32px 36px', maxWidth: 1280 }}>
+      {/* Test mode banner */}
+      {testMode && (
+        <div style={{ background: '#2a1f00', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 10, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>Test Mode</span>
+          <span style={{ fontSize: 12, color: '#fbbf24' }}>Simulated data — all 6 trucks shown charging at full capacity. Real fleet data is paused.</span>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
@@ -670,7 +739,15 @@ export default function ChargeTrucks() {
           <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Mobile energy fleet · refreshes every 30 s</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {lastUpdated && <span style={{ fontSize: 11, color: '#8892a4' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
+          {!testMode && lastUpdated && <span style={{ fontSize: 11, color: '#8892a4' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
+          {/* Test mode toggle */}
+          <button
+            onClick={() => { setTestMode((m) => !m); setDemoTick(0); }}
+            style={{ background: testMode ? '#2a1f00' : '#22263a', border: `1px solid ${testMode ? '#f59e0b' : '#2e3347'}`, borderRadius: 7, padding: '7px 14px', color: testMode ? '#f59e0b' : '#8892a4', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: testMode ? '#f59e0b' : '#4b5563', display: 'inline-block', boxShadow: testMode ? '0 0 6px #f59e0b' : 'none' }} />
+            {testMode ? 'Test Mode ON' : 'Test Mode'}
+          </button>
           <button onClick={load} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 12px', color: '#8892a4', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <RefreshCw size={12} /> Refresh
           </button>
@@ -680,7 +757,7 @@ export default function ChargeTrucks() {
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
-          { label: 'Total Trucks',   value: trucks.length,  color: '#f1f5f9' },
+          { label: 'Total Trucks',   value: displayTrucks.length,  color: '#f1f5f9' },
           { label: 'Online',         value: totalOnline,    color: '#47a141' },
           { label: 'Charging',       value: totalCharging,  color: '#3b82f6' },
           { label: 'Total Output',   value: `${totalKw.toFixed(1)} kW`, color: '#f59e0b' },
@@ -711,8 +788,8 @@ export default function ChargeTrucks() {
 
       {tab === 'fleet' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(560px, 1fr))', gap: 16 }}>
-          {trucks.map((truck) => <TruckCard key={truck.id} truck={truck} />)}
-          {trucks.length === 0 && (
+          {displayTrucks.map((truck) => <TruckCard key={truck.id} truck={truck} />)}
+          {displayTrucks.length === 0 && (
             <div style={{ gridColumn: '1/-1', padding: 60, textAlign: 'center', color: '#8892a4', background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12 }}>
               No trucks found. Run the SQL setup in Supabase to create the fleet.
             </div>
