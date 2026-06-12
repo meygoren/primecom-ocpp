@@ -1,8 +1,17 @@
+import { supabase } from './supabase';
+
 const BASE = import.meta.env.VITE_API_URL || '';
 
 async function request(path, options = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
     ...options,
   });
   const data = await res.json();
@@ -11,34 +20,50 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // Chargers
   getChargers: () => request('/api/chargers'),
   getCharger: (id) => request(`/api/chargers/${encodeURIComponent(id)}`),
   updateCharger: (id, body) =>
-    request(`/api/chargers/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
+    request(`/api/chargers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // Sessions
   getSessions: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return request(`/api/sessions${q ? '?' + q : ''}`);
   },
+
+  // Logs
   getLogs: (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return request(`/api/logs${q ? '?' + q : ''}`);
   },
+
+  // Commands
   sendCommand: (id, action, body = {}) =>
     request(`/api/commands/${encodeURIComponent(id)}/${action}`, {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // Firmware history
   getFirmwareHistory: (id) => request(`/api/chargers/${encodeURIComponent(id)}/firmware`),
+
   // RFID tags
   getRfidTags: () => request('/api/rfid'),
-  addRfidTag: (tag, label) =>
-    request('/api/rfid', {
-      method: 'POST',
-      body: JSON.stringify({ tag, label }),
-    }),
-  deleteRfidTag: (tag) =>
-    request(`/api/rfid/${encodeURIComponent(tag)}`, { method: 'DELETE' }),
+  addRfidTag: (tag, label) => request('/api/rfid', { method: 'POST', body: JSON.stringify({ tag, label }) }),
+  deleteRfidTag: (tag) => request(`/api/rfid/${encodeURIComponent(tag)}`, { method: 'DELETE' }),
+
+  // Current user profile + visible chargers
+  getMe: () => request('/api/me'),
+  getMyChargers: () => request('/api/me/chargers'),
+
+  // Admin — user management
+  adminGetUsers: () => request('/api/admin/users'),
+  adminCreateUser: (body) => request('/api/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  adminUpdateUser: (id, body) =>
+    request(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  adminDeleteUser: (id) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
+  adminGetUserChargers: (id) => request(`/api/admin/users/${id}/chargers`),
+  adminSetUserChargers: (id, charger_ids) =>
+    request(`/api/admin/users/${id}/chargers`, { method: 'PUT', body: JSON.stringify({ charger_ids }) }),
 };

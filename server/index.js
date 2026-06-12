@@ -24,6 +24,8 @@ const sessionsRouter = require('./routes/sessions');
 const logsRouter = require('./routes/logs');
 const commandsRouter = require('./routes/commands');
 const rfidRouter = require('./routes/rfid');
+const meRouter = require('./routes/me');
+const adminRouter = require('./routes/admin');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -50,6 +52,8 @@ app.use('/api/sessions', sessionsRouter);
 app.use('/api/logs', logsRouter);
 app.use('/api/commands', commandsRouter);
 app.use('/api/rfid', rfidRouter);
+app.use('/api/me', meRouter);
+app.use('/api/admin', adminRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);
