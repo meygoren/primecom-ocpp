@@ -1,46 +1,73 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 
-const BASE_NAV = [
-  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null,            adminOnly: false },
-  { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null,            adminOnly: false },
-  { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null,            adminOnly: false },
+const ADMIN_OPERATOR_NAV = [
+  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
+  { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null },
+  { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null },
+  { to: '/rfid',     icon: CreditCard,      label: 'RFID Tags',  settingKey: 'nav_rfid_tags' },
+  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null },
 ];
 
-const CONDITIONAL_NAV = [
-  { to: '/rfid',     icon: CreditCard,      label: 'RFID Tags',  settingKey: 'nav_rfid_tags', adminOnly: false },
-  { to: '/accounts', icon: Users,           label: 'Accounts',   settingKey: null,            adminOnly: true  },
-  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null,            adminOnly: false },
+const ADMIN_ONLY_NAV = [
+  { to: '/accounts', icon: Users, label: 'Accounts', settingKey: null },
 ];
 
-function getNavItems(isAdmin) {
-  return [
-    ...BASE_NAV,
-    ...CONDITIONAL_NAV.filter((item) => {
-      if (item.adminOnly && !isAdmin) return false;
+const VIEWER_NAV = [
+  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
+  { to: '/sessions', icon: Zap,             label: 'Sessions',   settingKey: null },
+  { to: '/logs',     icon: ScrollText,      label: 'Logs',       settingKey: null },
+  { to: '/settings', icon: Settings,        label: 'Settings',   settingKey: null },
+];
+
+const DRIVER_NAV = [
+  { to: '/', icon: BatteryCharging, label: 'My Charger', settingKey: null },
+];
+
+function getNavItems(role) {
+  if (role === 'admin') {
+    return [...ADMIN_OPERATOR_NAV, ...ADMIN_ONLY_NAV].filter((item) => {
       if (!item.settingKey) return true;
       return localStorage.getItem(`settings_${item.settingKey}`) !== 'false';
-    }),
-  ];
+    });
+  }
+  if (role === 'operator') {
+    return ADMIN_OPERATOR_NAV.filter((item) => {
+      if (!item.settingKey) return true;
+      return localStorage.getItem(`settings_${item.settingKey}`) !== 'false';
+    });
+  }
+  if (role === 'viewer') return VIEWER_NAV;
+  if (role === 'driver') return DRIVER_NAV;
+  return [];
 }
+
+const ROLE_LABELS = {
+  admin: { label: 'Admin', color: '#47a141' },
+  operator: { label: 'Operator', color: '#3b82f6' },
+  viewer: { label: 'Viewer', color: '#f59e0b' },
+  driver: { label: 'Driver', color: '#a855f7' },
+};
 
 export default function Sidebar() {
   const profile = useProfile();
-  const isAdmin = profile?.role === 'admin';
+  const role = profile?.role;
 
-  const [navItems, setNavItems] = useState(() => getNavItems(false));
-
-  useEffect(() => {
-    setNavItems(getNavItems(isAdmin));
-  }, [isAdmin]);
+  const [navItems, setNavItems] = useState(() => getNavItems(role));
 
   useEffect(() => {
-    function onStorage() { setNavItems(getNavItems(isAdmin)); }
+    setNavItems(getNavItems(role));
+  }, [role]);
+
+  useEffect(() => {
+    function onStorage() { setNavItems(getNavItems(role)); }
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [isAdmin]);
+  }, [role]);
+
+  const roleInfo = ROLE_LABELS[role] || null;
 
   return (
     <aside
@@ -94,9 +121,9 @@ export default function Sidebar() {
       </nav>
 
       <div style={{ padding: '16px 24px', borderTop: '1px solid #2e3347' }}>
-        {isAdmin && (
-          <div style={{ fontSize: 10, color: '#47a141', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-            Admin
+        {roleInfo && (
+          <div style={{ fontSize: 10, color: roleInfo.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+            {roleInfo.label}
           </div>
         )}
         <div style={{ fontSize: 11, color: '#8892a4' }}>Primecom Technologies LLC</div>

@@ -56,6 +56,14 @@ export const api = {
   // Current user profile + visible chargers
   getMe: () => request('/api/me'),
   getMyChargers: () => request('/api/me/chargers'),
+  getDriverView: () => request('/api/me/driver'),
+
+  // Notifications
+  getNotifications: () => request('/api/notifications'),
+  markNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () => request('/api/notifications/read-all', { method: 'POST' }),
+  getNotificationPrefs: () => request('/api/notifications/preferences'),
+  setNotificationPrefs: (body) => request('/api/notifications/preferences', { method: 'PUT', body: JSON.stringify(body) }),
 
   // Admin — user management
   adminGetUsers: () => request('/api/admin/users'),

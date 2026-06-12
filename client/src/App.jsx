@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { ProfileProvider } from './contexts/ProfileContext';
+import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
+import DriverDashboard from './pages/DriverDashboard';
 import ChargerDetail from './pages/ChargerDetail';
 import Sessions from './pages/Sessions';
 import Logs from './pages/Logs';
@@ -24,6 +25,15 @@ function Layout({ children }) {
 function PrivateRoute({ session, children }) {
   if (!session) return <Navigate to="/login" replace />;
   return <Layout>{children}</Layout>;
+}
+
+function HomeRoute({ session }) {
+  const profile = useProfile();
+  if (!session) return <Navigate to="/login" replace />;
+  if (profile?.role === 'driver') {
+    return <Layout><DriverDashboard /></Layout>;
+  }
+  return <Layout><Dashboard /></Layout>;
 }
 
 export default function App() {
@@ -48,7 +58,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
-          <Route path="/" element={<PrivateRoute session={session}><Dashboard /></PrivateRoute>} />
+          <Route path="/" element={<HomeRoute session={session} />} />
           <Route path="/charger/:id" element={<PrivateRoute session={session}><ChargerDetail /></PrivateRoute>} />
           <Route path="/sessions" element={<PrivateRoute session={session}><Sessions /></PrivateRoute>} />
           <Route path="/logs" element={<PrivateRoute session={session}><Logs /></PrivateRoute>} />

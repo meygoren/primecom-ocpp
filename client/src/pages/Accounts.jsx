@@ -3,9 +3,18 @@ import { api } from '../lib/api';
 import { formatDateTime } from '../lib/time';
 
 const ROLE_COLORS = {
-  admin: { bg: '#1a3a1a', border: '#47a141', text: '#47a141' },
-  user:  { bg: '#1a2540', border: '#3b82f6', text: '#3b82f6' },
+  admin:    { bg: '#1a3a1a', border: '#47a141', text: '#47a141' },
+  operator: { bg: '#1a2a3a', border: '#3b82f6', text: '#3b82f6' },
+  viewer:   { bg: '#2a2a1a', border: '#f59e0b', text: '#f59e0b' },
+  driver:   { bg: '#2a1a2a', border: '#a855f7', text: '#a855f7' },
 };
+
+const ROLE_OPTIONS = [
+  { value: 'admin',    label: 'Admin',    desc: 'Full access — all pages, commands, user management' },
+  { value: 'operator', label: 'Operator', desc: 'All pages + commands, cannot manage user accounts' },
+  { value: 'viewer',   label: 'Viewer',   desc: 'View-only access — no commands, no changes' },
+  { value: 'driver',   label: 'Driver',   desc: 'Assigned charger + SOC notifications only' },
+];
 
 function RoleBadge({ role }) {
   const c = ROLE_COLORS[role] || ROLE_COLORS.user;
@@ -34,7 +43,7 @@ export default function Accounts() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('user');
+  const [newRole, setNewRole] = useState('viewer');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
 
@@ -98,7 +107,7 @@ export default function Accounts() {
     setCreateError(null);
     try {
       await api.adminCreateUser({ email: newEmail, password: newPassword, full_name: newName, role: newRole });
-      setNewEmail(''); setNewPassword(''); setNewName(''); setNewRole('user');
+      setNewEmail(''); setNewPassword(''); setNewName(''); setNewRole('viewer');
       setShowCreate(false);
       loadUsers();
     } catch (err) {
@@ -108,8 +117,7 @@ export default function Accounts() {
     }
   }
 
-  async function toggleRole(user) {
-    const newRole = user.role === 'admin' ? 'user' : 'admin';
+  async function changeRole(user, newRole) {
     try {
       await api.adminUpdateUser(user.id, { role: newRole });
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, role: newRole } : u));
@@ -182,8 +190,9 @@ export default function Accounts() {
                   onChange={(e) => setNewRole(e.target.value)}
                   style={{ ...inputStyle, cursor: 'pointer' }}
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  {ROLE_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -235,13 +244,16 @@ export default function Accounts() {
                     <td style={{ padding: '12px 16px', color: '#8892a4' }}>{formatDateTime(u.created_at)}</td>
                     <td style={{ padding: '12px 16px' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          onClick={() => toggleRole(u)}
-                          title={u.role === 'admin' ? 'Demote to User' : 'Promote to Admin'}
-                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '5px 10px', color: '#8892a4', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        <select
+                          value={u.role}
+                          onChange={(e) => changeRole(u, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '5px 8px', color: '#8892a4', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
                         >
-                          {u.role === 'admin' ? 'Make User' : 'Make Admin'}
-                        </button>
+                          {ROLE_OPTIONS.map((r) => (
+                            <option key={r.value} value={r.value}>{r.label}</option>
+                          ))}
+                        </select>
                         {deletingId === u.id ? (
                           <>
                             <button onClick={() => deleteUser(u.id)} style={{ background: '#3f1515', border: '1px solid #ef4444', borderRadius: 6, padding: '5px 10px', color: '#ef4444', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Confirm</button>
