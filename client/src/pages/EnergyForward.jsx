@@ -498,6 +498,34 @@ function DriverView({ chargers }) {
   );
 }
 
+// ── Demo data generator ───────────────────────────────────────────────────────
+
+const DEMO_SLOTS = [
+  { slot: 1, label: 'Charger A1', baseSoc: 72, phase: 0.0 },
+  { slot: 2, label: 'Charger A2', baseSoc: 85, phase: 1.5 },
+  { slot: 3, label: 'Charger B1', baseSoc: 55, phase: 0.8 },
+  { slot: 4, label: 'Charger B2', baseSoc: 38, phase: 2.2 },
+];
+
+function getDemoChargers(tick) {
+  const t = tick * 0.45;
+  return DEMO_SLOTS.map(({ slot, label, baseSoc, phase }) => ({
+    id: `demo-${slot}`,
+    slot,
+    ocpp_id: `DEMO-WH-0${slot}`,
+    label,
+    live: {
+      status: 'charging',
+      power_kw: 308 + Math.sin(t + phase) * 8 + Math.cos(t * 1.6 + phase) * 4,
+      soc: Math.min(98, Math.max(5, baseSoc + Math.sin(t * 0.12 + phase) * 4)),
+      connectors: [
+        { connector_id: 1, active: true },
+        { connector_id: 2, active: true },
+      ],
+    },
+  }));
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function EnergyForward() {
@@ -505,10 +533,12 @@ export default function EnergyForward() {
   const isAdmin   = profile?.role === 'admin';
   const isDriver  = profile?.role === 'driver';
 
-  const [chargers, setChargers]       = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
+  const [chargers, setChargers]         = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [testMode, setTestMode]         = useState(false);
+  const [demoTick, setDemoTick]         = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -528,6 +558,13 @@ export default function EnergyForward() {
     return () => clearInterval(iv);
   }, [load]);
 
+  // Tick demo data every 1.8 s when test mode is on
+  useEffect(() => {
+    if (!testMode) return;
+    const iv = setInterval(() => setDemoTick((t) => t + 1), 1800);
+    return () => clearInterval(iv);
+  }, [testMode]);
+
   if (isDriver) {
     return loading ? (
       <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading...</div>
@@ -536,7 +573,8 @@ export default function EnergyForward() {
     );
   }
 
-  const sorted   = [...chargers].sort((a, b) => a.slot - b.slot);
+  const displayChargers = testMode ? getDemoChargers(demoTick) : chargers;
+  const sorted   = [...displayChargers].sort((a, b) => a.slot - b.slot);
   const bayA     = sorted.filter((c) => c.slot <= 2);
   const bayB     = sorted.filter((c) => c.slot > 2);
   const charger1 = bayA[0] || null;
@@ -544,13 +582,21 @@ export default function EnergyForward() {
   const charger3 = bayB[0] || null;
   const charger4 = bayB[1] || null;
 
-  const activeChargers = chargers.filter((c) => c.live?.status === 'charging').length;
-  const totalKw        = chargers.reduce((sum, c) => sum + (c.live?.power_kw || 0), 0);
+  const activeChargers = displayChargers.filter((c) => c.live?.status === 'charging').length;
+  const totalKw        = displayChargers.reduce((sum, c) => sum + (c.live?.power_kw || 0), 0);
 
   return (
     <div style={{ padding: '32px 36px', maxWidth: 1280 }}>
       {/* Inject animation keyframes */}
       <style>{ANIM_STYLES}</style>
+
+      {/* Test mode banner */}
+      {testMode && (
+        <div style={{ background: '#2a1f00', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 10, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.06em', flexShrink: 0 }}>Test Mode</span>
+          <span style={{ fontSize: 12, color: '#fbbf24' }}>Simulated data — all values are fake. Real charger data is paused.</span>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
@@ -560,14 +606,36 @@ export default function EnergyForward() {
             Energy Forward LLC · Recharging bay · refreshes every 30 s
           </div>
         </div>
-        {isAdmin && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Test mode toggle */}
           <button
-            onClick={() => setSettingsOpen((o) => !o)}
-            style={{ background: settingsOpen ? '#2d5c2a33' : '#22263a', border: `1px solid ${settingsOpen ? '#47a141' : '#2e3347'}`, borderRadius: 7, padding: '7px 14px', color: settingsOpen ? '#47a141' : '#8892a4', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            onClick={() => { setTestMode((m) => !m); setDemoTick(0); }}
+            style={{
+              background: testMode ? '#2a1f00' : '#22263a',
+              border: `1px solid ${testMode ? '#f59e0b' : '#2e3347'}`,
+              borderRadius: 7,
+              padding: '7px 14px',
+              color: testMode ? '#f59e0b' : '#8892a4',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
           >
-            {settingsOpen ? 'Hide Settings' : 'Settings'}
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: testMode ? '#f59e0b' : '#4b5563', display: 'inline-block', boxShadow: testMode ? '0 0 6px #f59e0b' : 'none' }} />
+            {testMode ? 'Test Mode ON' : 'Test Mode'}
           </button>
-        )}
+          {isAdmin && (
+            <button
+              onClick={() => setSettingsOpen((o) => !o)}
+              style={{ background: settingsOpen ? '#2d5c2a33' : '#22263a', border: `1px solid ${settingsOpen ? '#47a141' : '#2e3347'}`, borderRadius: 7, padding: '7px 14px', color: settingsOpen ? '#47a141' : '#8892a4', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              {settingsOpen ? 'Hide Settings' : 'Settings'}
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && <div style={{ color: '#8892a4', padding: 40 }}>Loading warehouse data...</div>}
