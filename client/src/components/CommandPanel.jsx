@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
+import { useProfile } from '../contexts/ProfileContext';
 
 const ALL_COMMANDS = [
   { key: 'reset', label: 'Reboot', description: 'Send a Soft reset to the charger', fields: [], settingKey: null },
@@ -51,6 +52,9 @@ const ALL_COMMANDS = [
 ];
 
 export default function CommandPanel({ chargerId }) {
+  const profile = useProfile();
+  const canCommand = profile?.role === 'admin' || profile?.role === 'operator';
+
   const COMMANDS = ALL_COMMANDS.filter((cmd) => {
     if (!cmd.settingKey) return true;
     return localStorage.getItem(`settings_${cmd.settingKey}`) !== 'false';
@@ -88,6 +92,8 @@ export default function CommandPanel({ chargerId }) {
       setLoading(false);
     }
   }
+
+  if (!canCommand) return null;
 
   return (
     <div
