@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronDown, ChevronUp, Truck, Users, Plus, Trash2, Bell, BellOff, Send, Save } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp, Truck, Users, Plus, Trash2, Bell, BellOff, Send, Save, Clock } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
 
@@ -157,6 +157,66 @@ function SettingsTab({ trucks, onRefresh }) {
   const [testingSms, setTestingSms]         = useState(false);
   const [testResult, setTestResult]         = useState(null);
   const [settingsSubTab, setSettingsSubTab] = useState('trucks');
+
+  const [scheduleEditing, setScheduleEditing] = useState(null);
+  const [scheduleForm, setScheduleForm]       = useState({ days: [], start: '', end: '' });
+  const [savingSchedule, setSavingSchedule]   = useState(false);
+
+  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  function scheduleSummary(sup) {
+    const { schedule_days: days, schedule_start: start, schedule_end: end } = sup;
+    if (!days?.length && !start && !end) return null;
+    const dayStr = days?.length ? days.map((d) => DAY_LABELS[d]).join(' ') : 'Every day';
+    const timeStr = start && end ? ` · ${start}–${end} UTC` : '';
+    return dayStr + timeStr;
+  }
+
+  function openSchedule(sup) {
+    setScheduleEditing(sup.id);
+    setScheduleForm({
+      days: sup.schedule_days || [],
+      start: sup.schedule_start || '',
+      end: sup.schedule_end || '',
+    });
+  }
+
+  function toggleDay(d) {
+    setScheduleForm((f) => ({
+      ...f,
+      days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d].sort((a, b) => a - b),
+    }));
+  }
+
+  async function saveSchedule(supId) {
+    setSavingSchedule(true);
+    try {
+      const updated = await api.updateEfSupervisor(supId, {
+        schedule_days: scheduleForm.days,
+        schedule_start: scheduleForm.start || null,
+        schedule_end: scheduleForm.end || null,
+      });
+      setSupervisors((p) => p.map((s) => (s.id === supId ? { ...s, ...updated } : s)));
+      setScheduleEditing(null);
+    } catch (err) {
+      alert('Failed to save schedule: ' + err.message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  }
+
+  async function clearSchedule(supId) {
+    setSavingSchedule(true);
+    try {
+      const updated = await api.updateEfSupervisor(supId, { schedule_days: [], schedule_start: null, schedule_end: null });
+      setSupervisors((p) => p.map((s) => (s.id === supId ? { ...s, ...updated } : s)));
+      setScheduleEditing(null);
+    } catch (err) {
+      alert('Failed to clear schedule: ' + err.message);
+    } finally {
+      setSavingSchedule(false);
+    }
+  }
 
   useEffect(() => {
     api.getEfSupervisors()
@@ -371,23 +431,115 @@ function SettingsTab({ trucks, onRefresh }) {
             ) : supervisors.length === 0 ? (
               <div style={{ padding: 24, color: '#8892a4', fontSize: 12, textAlign: 'center' }}>No supervisors added yet.</div>
             ) : (
-              supervisors.map((sup) => (
-                <div key={sup.id} style={{ padding: '12px 20px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
-                    {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
-                    {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
+              supervisors.map((sup) => {
+                const summary = scheduleSummary(sup);
+                const isEditingSched = scheduleEditing === sup.id;
+                return (
+                  <div key={sup.id} style={{ borderBottom: '1px solid #2e3347' }}>
+                    {/* Main row */}
+                    <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
+                        {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
+                        {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
+                        {summary && (
+                          <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Clock size={10} /> {summary}
+                          </div>
+                        )}
+                        {!summary && (
+                          <div style={{ fontSize: 10, color: '#6b7280', marginTop: 3 }}>All days, all hours</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          onClick={() => isEditingSched ? setScheduleEditing(null) : openSchedule(sup)}
+                          style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${isEditingSched ? '#3b82f6' : '#2e3347'}`, background: isEditingSched ? '#1a2540' : 'none', color: isEditingSched ? '#3b82f6' : '#8892a4', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <Clock size={10} /> Schedule
+                        </button>
+                        <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
+                          {sup.active ? 'Active' : 'Off'}
+                        </button>
+                        <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                          <Trash2 size={13} color="#ef4444" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline schedule editor */}
+                    {isEditingSched && (
+                      <div style={{ padding: '0 20px 16px', background: '#0f1117' }}>
+                        <div style={{ fontSize: 10, color: '#8892a4', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+                          Alert Schedule — leave blank to always send
+                        </div>
+
+                        {/* Day toggles */}
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6 }}>Active days (none = every day)</div>
+                          <div style={{ display: 'flex', gap: 5 }}>
+                            {DAY_LABELS.map((label, idx) => {
+                              const active = scheduleForm.days.includes(idx);
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => toggleDay(idx)}
+                                  style={{ width: 34, height: 30, borderRadius: 6, border: `1px solid ${active ? '#3b82f6' : '#2e3347'}`, background: active ? '#1a2540' : '#22263a', color: active ? '#3b82f6' : '#6b7280', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                                >
+                                  {label.slice(0, 2)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Time range */}
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6 }}>Time window — UTC (leave blank for all hours)</div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <input
+                              type="time"
+                              value={scheduleForm.start}
+                              onChange={(e) => setScheduleForm((f) => ({ ...f, start: e.target.value }))}
+                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
+                            />
+                            <span style={{ fontSize: 11, color: '#6b7280' }}>to</span>
+                            <input
+                              type="time"
+                              value={scheduleForm.end}
+                              onChange={(e) => setScheduleForm((f) => ({ ...f, end: e.target.value }))}
+                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => saveSchedule(sup.id)}
+                            disabled={savingSchedule}
+                            style={{ background: '#47a141', border: 'none', borderRadius: 6, padding: '6px 14px', color: '#fff', fontSize: 11, fontWeight: 700, cursor: savingSchedule ? 'not-allowed' : 'pointer' }}
+                          >
+                            {savingSchedule ? 'Saving...' : 'Save Schedule'}
+                          </button>
+                          <button
+                            onClick={() => clearSchedule(sup.id)}
+                            disabled={savingSchedule}
+                            style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 14px', color: '#8892a4', fontSize: 11, cursor: 'pointer' }}
+                          >
+                            Clear (always send)
+                          </button>
+                          <button
+                            onClick={() => setScheduleEditing(null)}
+                            style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 11, cursor: 'pointer', marginLeft: 'auto' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
-                      {sup.active ? 'Active' : 'Off'}
-                    </button>
-                    <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-                      <Trash2 size={13} color="#ef4444" />
-                    </button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
