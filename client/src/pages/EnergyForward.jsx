@@ -29,6 +29,35 @@ function socColor(soc) {
   return '#f59e0b';
 }
 
+// ── Time-to-full helpers ──────────────────────────────────────────────────────
+// The server returns eta_minutes from a blended predictor (observed charge rate
+// + historical session data + physics). When it's not available (e.g. test
+// mode), fall back to a client-side physics estimate: remaining kWh out of the
+// 450 kWh pack divided by current charging power, with throttling above 88%.
+
+function clientPhysicsEta(soc, kw) {
+  if (soc == null || soc >= 100 || !kw || kw <= 0) return null;
+  const TAPER_START = 88;
+  let minutes = 0;
+  if (soc < TAPER_START) {
+    minutes += ((((TAPER_START - soc) / 100) * 450) / kw) * 60;
+  }
+  const taperFrom = Math.max(soc, TAPER_START);
+  if (taperFrom < 100) {
+    minutes += ((((100 - taperFrom) / 100) * 450) / (kw * 0.65)) * 60;
+  }
+  return Math.round(minutes);
+}
+
+function formatEta(minutes) {
+  if (minutes == null) return null;
+  if (minutes < 1) return { big: '<1', unit: 'min' };
+  if (minutes < 60) return { big: `${Math.round(minutes)}`, unit: 'min' };
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return { big: `${h}h ${m}m`, unit: '' };
+}
+
 // ── CableSVG ─────────────────────────────────────────────────────────────────
 // Draws two vertical cable lines from the charger pair down to the truck sides.
 
@@ -196,11 +225,83 @@ function BatteryPack({ soc, charging, kw, label }) {
   );
 }
 
+// ── EtaPanel ──────────────────────────────────────────────────────────────────
+// Predicted time until 100%, shown beside each battery inside the truck.
+
+function EtaPanel({ etaMinutes, confidence, charging, soc }) {
+  const isFull = soc != null && soc >= 100;
+  const eta = formatEta(etaMinutes);
+  const active = charging && eta !== null;
+
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      minWidth: 76,
+      padding: '8px 6px',
+    }}>
+      <div style={{
+        fontSize: 9,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '.08em',
+        color: '#8892a4',
+        textAlign: 'center',
+        lineHeight: 1.4,
+      }}>
+        Time to<br />Full
+      </div>
+
+      {isFull ? (
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#47a141' }}>Full</div>
+      ) : active ? (
+        <>
+          <div style={{
+            fontSize: eta.unit ? 26 : 19,
+            fontWeight: 800,
+            color: '#3b82f6',
+            lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+            textAlign: 'center',
+          }}>
+            {eta.big}
+          </div>
+          {eta.unit && (
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#3b82f688', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+              {eta.unit}
+            </div>
+          )}
+          {confidence && (
+            <div style={{
+              fontSize: 8,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '.06em',
+              color: confidence === 'high' ? '#47a141' : confidence === 'medium' ? '#f59e0b' : '#6b7280',
+              border: `1px solid ${confidence === 'high' ? '#47a14144' : confidence === 'medium' ? '#f59e0b44' : '#2e3347'}`,
+              borderRadius: 999,
+              padding: '1px 6px',
+              marginTop: 2,
+            }}>
+              {confidence === 'high' ? 'High conf' : confidence === 'medium' ? 'Med conf' : 'Estimate'}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#4b5563' }}>—</div>
+      )}
+    </div>
+  );
+}
+
 // ── TruckTopDown ──────────────────────────────────────────────────────────────
 // Class-8 truck viewed from above. Back (rear doors) at top, front at bottom.
 // Left rectangle = P-side (passenger), Right rectangle = D-side (driver).
 
-function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, emptyBay }) {
+function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay }) {
   const anyCharging = pCharging || dCharging;
   const bodyColor   = anyCharging ? '#1e2a3a' : '#1e2535';
   const borderColor = anyCharging ? '#3b82f666' : '#3a4060';
@@ -248,14 +349,20 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, emptyBay }) 
         gap: 14,
         transition: 'background 0.4s, border-color 0.4s',
       }}>
-        {/* Passenger side */}
-        <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
+        {/* Passenger side: battery + predicted time to full */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
+          <EtaPanel etaMinutes={pEta} confidence={pConf} charging={pCharging} soc={pSoc} />
+        </div>
 
         {/* Center structural beam */}
         <div style={{ width: 8, background: '#2a2e40', borderRadius: 4, alignSelf: 'stretch' }} />
 
-        {/* Driver side */}
-        <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
+        {/* Driver side: battery + predicted time to full */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
+          <EtaPanel etaMinutes={dEta} confidence={dConf} charging={dCharging} soc={dSoc} />
+        </div>
       </div>
 
       {/* Trailer → cab transition */}
@@ -397,6 +504,12 @@ function BayView({ label, charger1, charger2 }) {
   const dKw       = charger2?.live?.power_kw || 0;
   const emptyBay  = pSoc === null && dSoc === null && !pCharging && !dCharging;
 
+  // Server-blended prediction first; client physics estimate as fallback
+  const pEta  = charger1?.live?.eta_minutes ?? clientPhysicsEta(pSoc, pKw);
+  const dEta  = charger2?.live?.eta_minutes ?? clientPhysicsEta(dSoc, dKw);
+  const pConf = charger1?.live?.eta_minutes != null ? charger1.live.eta_confidence : (pEta != null ? 'low' : null);
+  const dConf = charger2?.live?.eta_minutes != null ? charger2.live.eta_confidence : (dEta != null ? 'low' : null);
+
   return (
     <div style={{
       flex: 1,
@@ -432,6 +545,8 @@ function BayView({ label, charger1, charger2 }) {
           pSoc={pSoc} dSoc={dSoc}
           pCharging={pCharging} dCharging={dCharging}
           pKw={pKw} dKw={dKw}
+          pEta={pEta} dEta={dEta}
+          pConf={pConf} dConf={dConf}
           emptyBay={emptyBay}
         />
       </div>
