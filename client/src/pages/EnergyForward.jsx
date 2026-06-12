@@ -6,12 +6,17 @@ import { useProfile } from '../contexts/ProfileContext';
 
 const ANIM_STYLES = `
   @keyframes chargePulse {
-    0%, 100% { box-shadow: 0 0 8px var(--c), inset 0 0 6px var(--c-dim); }
-    50%       { box-shadow: 0 0 20px var(--c), inset 0 0 14px var(--c-dim); }
+    0%, 100% { box-shadow: 0 0 8px var(--c-a), inset 0 0 6px var(--c-d); }
+    50%       { box-shadow: 0 0 24px var(--c), 0 0 48px var(--c-b), inset 0 0 18px var(--c-d); }
   }
   @keyframes cableFlow {
     from { stroke-dashoffset: 24; }
     to   { stroke-dashoffset: 0; }
+  }
+  @keyframes shimmer {
+    0%   { opacity: 0.0; transform: translateY(0); }
+    50%  { opacity: 0.5; transform: translateY(-10px); }
+    100% { opacity: 0.0; transform: translateY(-20px); }
   }
 `;
 
@@ -51,39 +56,56 @@ function CableSVG({ leftActive, rightActive }) {
 }
 
 // ── BatteryPack ───────────────────────────────────────────────────────────────
-// One side of the truck — a tall rectangle with SOC fill from the bottom.
+// One side of the truck. Fixed width, tall. Label above, then terminal cap,
+// then battery body: kW speed at top → SOC % center → kWh stored at bottom.
 
 function BatteryPack({ soc, charging, kw, label }) {
   const color  = socColor(soc);
   const pct    = soc != null ? Math.min(100, Math.max(0, soc)) : null;
   const noData = pct === null;
 
-  const dimColor = color + '44';
+  // Truck battery pack capacity ~450 kWh
+  const currentKwh = pct != null ? ((pct / 100) * 450).toFixed(0) : null;
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
       {/* Side label */}
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#8892a4', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+      <div style={{
+        fontSize: 10,
+        fontWeight: 700,
+        color: '#8892a4',
+        textTransform: 'uppercase',
+        letterSpacing: '.07em',
+      }}>
         {label}
       </div>
 
-      {/* Battery rectangle */}
+      {/* Terminal cap */}
+      <div style={{
+        width: 28,
+        height: 7,
+        background: '#3a4060',
+        borderRadius: '4px 4px 0 0',
+      }} />
+
+      {/* Battery body */}
       <div
         style={{
-          width: '100%',
-          height: 130,
+          width: 100,
+          height: 180,
           background: '#0f1117',
-          border: `2px solid ${noData ? '#2e3347' : color}`,
-          borderRadius: 8,
+          border: `3px solid ${noData ? '#2e3347' : color}`,
+          borderRadius: 6,
           overflow: 'hidden',
           position: 'relative',
-          // CSS custom props for animation
-          '--c':     color,
-          '--c-dim': dimColor,
+          '--c':   color,
+          '--c-a': color + 'aa',
+          '--c-b': color + '55',
+          '--c-d': color + '33',
           ...(charging && !noData ? { animation: 'chargePulse 2s ease-in-out infinite' } : {}),
         }}
       >
-        {/* Fill level */}
+        {/* SOC fill from bottom */}
         {!noData && (
           <div style={{
             position: 'absolute',
@@ -92,44 +114,84 @@ function BatteryPack({ soc, charging, kw, label }) {
             right: 0,
             height: `${pct}%`,
             background: `linear-gradient(to top, ${color}, ${color}99)`,
-            transition: 'height 0.8s ease',
+            transition: 'height 0.9s ease',
           }} />
         )}
 
-        {/* SOC number */}
+        {/* Shimmer sweep when charging */}
+        {charging && !noData && (
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 50,
+            background: `linear-gradient(to top, transparent, ${color}55)`,
+            animation: 'shimmer 1.8s ease-in-out infinite',
+            pointerEvents: 'none',
+          }} />
+        )}
+
+        {/* Text overlay: kW top / SOC center / kWh bottom */}
         <div style={{
           position: 'absolute',
           inset: 0,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: 4,
+          justifyContent: 'space-between',
+          padding: '12px 8px',
           zIndex: 1,
         }}>
-          <span style={{
-            fontSize: 22,
+          {/* Charging speed at top */}
+          <div style={{
+            fontSize: 11,
             fontWeight: 700,
-            color: !noData && pct > 45 ? '#fff' : noData ? '#4b5563' : color,
-            textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-            lineHeight: 1,
+            color: kw > 0 ? '#93c5fd' : '#4b5563',
+            textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+            textAlign: 'center',
+            fontVariantNumeric: 'tabular-nums',
           }}>
-            {noData ? '—' : `${Math.round(pct)}%`}
-          </span>
-          {kw > 0 && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#93c5fd', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
-              {kw.toFixed(0)} kW
+            {kw > 0 ? `${kw.toFixed(0)} kW` : '— kW'}
+          </div>
+
+          {/* SOC percentage center */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <span style={{
+              fontSize: 28,
+              fontWeight: 800,
+              color: '#fff',
+              textShadow: '0 1px 6px rgba(0,0,0,0.9)',
+              lineHeight: 1,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {noData ? '—' : `${Math.round(pct)}%`}
             </span>
-          )}
+            <span style={{
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: '.10em',
+              textTransform: 'uppercase',
+              color: 'rgba(255,255,255,0.6)',
+              textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+            }}>
+              State of Charge
+            </span>
+          </div>
+
+          {/* kWh stored at bottom */}
+          <div style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: noData ? '#4b5563' : 'rgba(255,255,255,0.75)',
+            textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+            textAlign: 'center',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {currentKwh != null ? `${currentKwh} kWh` : '—'}
+          </div>
         </div>
       </div>
-
-      {/* Charging indicator */}
-      {charging && (
-        <div style={{ fontSize: 9, color: '#3b82f6', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>
-          ● Charging
-        </div>
-      )}
     </div>
   );
 }
@@ -182,17 +244,18 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, emptyBay }) 
         borderBottom: 'none',
         padding: '14px 10px',
         display: 'flex',
-        gap: 10,
+        justifyContent: 'center',
+        gap: 14,
         transition: 'background 0.4s, border-color 0.4s',
       }}>
-        {/* P-Side (passenger) */}
-        <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="P-Side" />
+        {/* Passenger side */}
+        <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
 
         {/* Center structural beam */}
-        <div style={{ width: 8, background: '#2a2e40', borderRadius: 4, flexShrink: 0 }} />
+        <div style={{ width: 8, background: '#2a2e40', borderRadius: 4, alignSelf: 'stretch' }} />
 
-        {/* D-Side (driver) */}
-        <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="D-Side" />
+        {/* Driver side */}
+        <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
       </div>
 
       {/* Trailer → cab transition */}

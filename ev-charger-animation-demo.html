@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EV Charger Animation Demo</title>
+  <style>
+    /* ── Page ── */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    /* ── Outer card ── */
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2e3347;
+      border-radius: 16px;
+      padding: 40px 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 260px;
+    }
+
+    /* ── Charger box (wall unit) ── */
+    .charger-unit {
+      width: 80px;
+      background: #22263a;
+      border: 2px solid #3a4060;
+      border-radius: 10px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .charger-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+
+    .charger-screen {
+      width: 100%;
+      height: 28px;
+      background: #0f1117;
+      border: 1px solid #2e3347;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .charger-screen span {
+      font-size: 11px;
+      font-weight: 700;
+      color: #47a141;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .charger-port {
+      width: 18px;
+      height: 14px;
+      background: #3a4060;
+      border-radius: 3px;
+      border: 1px solid #4a5070;
+    }
+
+    /* ── Cable (SVG flowing line) ── */
+    .cable-svg {
+      display: block;
+      overflow: visible;
+    }
+
+    @keyframes flow {
+      from { stroke-dashoffset: 28; }
+      to   { stroke-dashoffset: 0; }
+    }
+
+    .cable-line {
+      animation: flow 0.55s linear infinite;
+    }
+
+    /* ── Battery container ── */
+    .battery-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    /* Terminal cap on top of battery */
+    .battery-cap {
+      width: 28px;
+      height: 7px;
+      background: #3a4060;
+      border-radius: 4px 4px 0 0;
+    }
+
+    /* The main battery body */
+    .battery-body {
+      width: 110px;
+      height: 170px;
+      border: 3px solid #47a141;
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+      background: #0f1117;
+    }
+
+    /* Glow animation on the battery border when charging */
+    @keyframes chargePulse {
+      0%, 100% {
+        box-shadow: 0 0 8px #47a141aa,  inset 0 0 6px #47a14122;
+      }
+      50% {
+        box-shadow: 0 0 24px #47a141,  0 0 48px #47a14155,
+                    inset 0 0 16px #47a14133;
+      }
+    }
+
+    .battery-body {
+      animation: chargePulse 2s ease-in-out infinite;
+    }
+
+    /* The fill — sits at the bottom, height = SOC% */
+    .battery-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 10%;             /* JS updates this */
+      background: linear-gradient(to top, #47a141, #47a14199);
+      transition: height 0.9s ease;
+    }
+
+    /* Shimmer overlay to make the fill look alive */
+    @keyframes shimmer {
+      0%   { opacity: 0.0; transform: translateY(0); }
+      50%  { opacity: 0.4; transform: translateY(-8px); }
+      100% { opacity: 0.0; transform: translateY(-16px); }
+    }
+
+    .battery-shimmer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 40px;
+      background: linear-gradient(to top, transparent, #47a14155);
+      animation: shimmer 1.8s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    /* SOC % text centered in battery */
+    .battery-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      z-index: 1;
+    }
+
+    .soc-number {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    .soc-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.6);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+    }
+
+    /* ── kW readout below battery ── */
+    .kw-row {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .kw-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #3b82f6;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kw-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+
+    /* ── "Charging" status pill ── */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .status-pill {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #1a2540;
+      border: 1px solid #3b82f644;
+      border-radius: 999px;
+      padding: 4px 12px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3b82f6;
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    .status-text {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: #3b82f6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+
+    <!-- Charger wall unit -->
+    <div class="charger-unit">
+      <div class="charger-label">Level 2</div>
+      <div class="charger-screen">
+        <span id="charger-kw">48.0 kW</span>
+      </div>
+      <div class="charger-port"></div>
+    </div>
+
+    <!-- Animated cable from charger to battery -->
+    <svg class="cable-svg" width="4" height="50">
+      <line
+        class="cable-line"
+        x1="2" y1="0"
+        x2="2" y2="50"
+        stroke="#47a141"
+        stroke-width="3"
+        stroke-dasharray="8 5"
+      />
+    </svg>
+
+    <!-- Battery -->
+    <div class="battery-wrap">
+      <div class="battery-cap"></div>
+      <div class="battery-body">
+        <div class="battery-fill" id="fill"></div>
+        <div class="battery-shimmer"></div>
+        <div class="battery-text">
+          <span class="soc-number" id="soc-number">—</span>
+          <span class="soc-label">State of Charge</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- kW readout -->
+    <div class="kw-row">
+      <span class="kw-value" id="kw-display">—</span>
+      <span class="kw-label">Charging Speed</span>
+    </div>
+
+    <!-- Status pill -->
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span class="status-text">Charging</span>
+    </div>
+
+  </div>
+
+  <script>
+    /*
+     * How this works:
+     *
+     * 1. tick increments every 1.5 s.
+     * 2. SOC climbs from 20% → 95%, then resets to 20% and repeats.
+     * 3. kW fluctuates realistically using two overlapping sine waves
+     *    so it looks like real charger output variance, not random noise.
+     * 4. Battery fill height = SOC%, with a CSS transition for smooth animation.
+     * 5. Glow pulse is pure CSS @keyframes — no JS needed for that.
+     * 6. Cable flow is a CSS animation on stroke-dashoffset — scrolls the
+     *    dashes along the line to simulate electricity moving downward.
+     */
+
+    let tick = 0;
+    const RATED_KW = 48;   // ← change this to match your charger model
+
+    function update() {
+      tick += 0.45;
+
+      // SOC: climbs from 20 to 95, then resets
+      const soc = 20 + ((tick * 1.4) % 75);
+
+      // kW: realistic variance around the rated output
+      const kw = RATED_KW
+        - 1.5
+        + Math.sin(tick)        * 1.8
+        + Math.cos(tick * 1.7)  * 0.9;
+
+      // Update DOM
+      document.getElementById('fill').style.height      = soc.toFixed(1) + '%';
+      document.getElementById('soc-number').textContent = Math.round(soc) + '%';
+      document.getElementById('kw-display').textContent = kw.toFixed(1) + ' kW';
+      document.getElementById('charger-kw').textContent = kw.toFixed(1) + ' kW';
+    }
+
+    // Run immediately so there's no blank flash, then repeat
+    update();
+    setInterval(update, 1500);
+  </script>
+
+</body>
+</html>
