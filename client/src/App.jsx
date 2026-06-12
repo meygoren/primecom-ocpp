@@ -14,6 +14,7 @@ import Settings from './pages/Settings';
 import Accounts from './pages/Accounts';
 import ChargeTrucks from './pages/ChargeTrucks';
 import EnergyForward from './pages/EnergyForward';
+import Billing from './pages/Billing';
 
 function Layout({ children }) {
   return (
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/accounts" element={<PrivateRoute session={session}><Accounts /></PrivateRoute>} />
           <Route path="/charge-trucks" element={<PrivateRoute session={session}><ChargeTrucks /></PrivateRoute>} />
           <Route path="/energy-forward" element={<PrivateRoute session={session}><EnergyForward /></PrivateRoute>} />
+          <Route path="/billing" element={<PrivateRoute session={session}><Billing /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

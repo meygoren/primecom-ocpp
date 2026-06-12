@@ -29,6 +29,8 @@ const adminRouter = require('./routes/admin');
 const notificationsRouter = require('./routes/notifications');
 const chargeTrucksRouter = require('./routes/chargeTrucks');
 const efSupervisorsRouter = require('./routes/efSupervisors');
+const billingRouter = require('./routes/billing');
+const { startWeeklyCron } = require('./routes/billing');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -60,6 +62,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/charge-trucks', chargeTrucksRouter);
 app.use('/api/ef-supervisors', efSupervisorsRouter);
+app.use('/api/billing', billingRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);
@@ -141,4 +144,5 @@ server.listen(PORT, () => {
   console.log(`[Server] Primecom OCPP server running on port ${PORT}`);
   console.log(`[Server] WebSocket endpoint: ws://localhost:${PORT}/ocpp/:chargePointId`);
   console.log(`[Server] REST API: http://localhost:${PORT}/api`);
+  startWeeklyCron();
 });
