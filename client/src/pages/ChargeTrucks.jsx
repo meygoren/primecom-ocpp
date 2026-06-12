@@ -466,8 +466,6 @@ function SettingsTab({ trucks, onRefresh }) {
           ))}
         </div>
       </div>
-
-      </div>
       )}
     </div>
   );
