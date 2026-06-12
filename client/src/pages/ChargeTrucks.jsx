@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronDown, ChevronUp, Truck, Users, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp, Truck, Users, Plus, Trash2, Bell, BellOff, Send, Save } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
 
@@ -150,11 +150,53 @@ function SettingsTab({ trucks, onRefresh }) {
   const [newSup, setNewSup]             = useState({ name: '', phone: '', email: '' });
   const [addingSup, setAddingSup]       = useState(false);
 
+  const [alertsEnabled, setAlertsEnabled]   = useState(true);
+  const [customMessage, setCustomMessage]   = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved]   = useState(false);
+  const [testingSms, setTestingSms]         = useState(false);
+  const [testResult, setTestResult]         = useState(null);
+  const [settingsSubTab, setSettingsSubTab] = useState('trucks');
+
   useEffect(() => {
     api.getEfSupervisors()
       .then((d) => setSupervisors(d))
       .finally(() => setLoadingSup(false));
+    api.getEfSettings()
+      .then((d) => {
+        setAlertsEnabled(d.soc_alerts_enabled !== false);
+        setCustomMessage(d.custom_message || '');
+      })
+      .catch(() => {});
   }, []);
+
+  async function saveSettings() {
+    setSavingSettings(true);
+    setSettingsSaved(false);
+    try {
+      await api.saveEfSettings({ soc_alerts_enabled: alertsEnabled, custom_message: customMessage });
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function sendTestSms() {
+    setTestingSms(true);
+    setTestResult(null);
+    try {
+      const result = await api.sendTestSms();
+      setTestResult({ ok: true, msg: `Sent to ${result.recipients?.join(', ') || result.sent + ' recipient(s)'}` });
+    } catch (err) {
+      setTestResult({ ok: false, msg: err.message });
+    } finally {
+      setTestingSms(false);
+      setTimeout(() => setTestResult(null), 6000);
+    }
+  }
 
   function openTruck(truck) {
     setExpanded(truck.id);
@@ -210,8 +252,148 @@ function SettingsTab({ trucks, onRefresh }) {
   const lbl = { fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
-      {/* Left: truck OCPP config */}
+    <div>
+      {/* Sub-tab selector */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #2e3347', paddingBottom: 0 }}>
+        {[['trucks', 'Charge Trucks Config'], ['ef', 'Energy Forward Alerts']].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSettingsSubTab(key)}
+            style={{
+              background: 'none', border: 'none', borderBottom: `2px solid ${settingsSubTab === key ? '#47a141' : 'transparent'}`,
+              padding: '7px 16px', color: settingsSubTab === key ? '#47a141' : '#8892a4',
+              fontSize: 13, fontWeight: settingsSubTab === key ? 700 : 400, cursor: 'pointer', marginBottom: -1,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {settingsSubTab === 'ef' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+          {/* Energy Forward alert settings */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 4 }}>Alert Settings</div>
+              <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 20 }}>Configure SOC threshold notifications for Energy Forward supervisors.</div>
+
+              {/* Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#22263a', borderRadius: 8, marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 7 }}>
+                    {alertsEnabled ? <Bell size={13} color="#47a141" /> : <BellOff size={13} color="#6b7280" />}
+                    SOC Alerts
+                  </div>
+                  <div style={{ fontSize: 11, color: '#8892a4', marginTop: 2 }}>Send SMS when a truck side hits its threshold</div>
+                </div>
+                <button
+                  onClick={() => { setAlertsEnabled(!alertsEnabled); setSettingsSaved(false); }}
+                  style={{
+                    width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                    background: alertsEnabled ? '#47a141' : '#2e3347',
+                    position: 'relative', transition: 'background 0.2s',
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: 3, left: alertsEnabled ? 22 : 3,
+                    width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.2s', display: 'block',
+                  }} />
+                </button>
+              </div>
+
+              {/* Custom message */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ ...lbl, marginBottom: 6 }}>Custom Alert Message (optional)</label>
+                <textarea
+                  value={customMessage}
+                  onChange={(e) => { setCustomMessage(e.target.value); setSettingsSaved(false); }}
+                  placeholder={`Leave blank to use default:\n"Truck 1 Passenger reached 80%, Driver is at 74%. Ready for deployment."`}
+                  rows={4}
+                  style={{ ...inp, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                />
+                <div style={{ fontSize: 11, color: '#8892a4', marginTop: 4 }}>Leave blank to use the auto-generated message with truck name, side, and SOC values.</div>
+              </div>
+
+              {/* Save + Test row */}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={saveSettings}
+                  disabled={savingSettings}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: savingSettings ? '#22263a' : '#47a141', border: 'none', borderRadius: 7, padding: '9px 18px', color: savingSettings ? '#8892a4' : '#fff', fontWeight: 700, fontSize: 13, cursor: savingSettings ? 'not-allowed' : 'pointer' }}
+                >
+                  <Save size={13} /> {savingSettings ? 'Saving...' : 'Save Settings'}
+                </button>
+                {settingsSaved && <span style={{ fontSize: 12, color: '#47a141', fontWeight: 600 }}>Saved</span>}
+
+                <button
+                  onClick={sendTestSms}
+                  disabled={testingSms}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#22263a', border: '1px solid #3b82f6', borderRadius: 7, padding: '9px 16px', color: testingSms ? '#8892a4' : '#3b82f6', fontWeight: 600, fontSize: 13, cursor: testingSms ? 'not-allowed' : 'pointer', marginLeft: 'auto' }}
+                >
+                  <Send size={13} /> {testingSms ? 'Sending...' : 'Send Test SMS'}
+                </button>
+              </div>
+
+              {testResult && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: testResult.ok ? '#1a3a1a' : '#3f1515', border: `1px solid ${testResult.ok ? '#47a141' : '#ef4444'}`, borderRadius: 7, fontSize: 12, color: testResult.ok ? '#47a141' : '#ef4444' }}>
+                  {testResult.ok ? `Test SMS sent to: ${testResult.msg}` : `Failed: ${testResult.msg}`}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: supervisors */}
+          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #2e3347' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users size={14} /> Alert Supervisors
+              </div>
+              <div style={{ fontSize: 11, color: '#8892a4', marginTop: 3 }}>Receive SMS when a truck hits its SOC threshold</div>
+            </div>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #2e3347', background: '#1e2535' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <input style={inp} placeholder="Name *" value={newSup.name} onChange={(e) => setNewSup({ ...newSup, name: e.target.value })} />
+                <input style={inp} placeholder="Phone (+14081234567)" value={newSup.phone} onChange={(e) => setNewSup({ ...newSup, phone: e.target.value })} />
+                <input style={inp} placeholder="Email (optional)" value={newSup.email} onChange={(e) => setNewSup({ ...newSup, email: e.target.value })} />
+                <button
+                  onClick={addSupervisor}
+                  disabled={addingSup || !newSup.name.trim()}
+                  style={{ background: !newSup.name.trim() ? '#22263a' : '#47a141', border: 'none', borderRadius: 7, padding: '8px 0', color: !newSup.name.trim() ? '#6b7280' : '#fff', fontWeight: 700, fontSize: 12, cursor: !newSup.name.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <Plus size={12} /> Add Supervisor
+                </button>
+              </div>
+            </div>
+            {loadingSup ? (
+              <div style={{ padding: 24, color: '#8892a4', fontSize: 12 }}>Loading...</div>
+            ) : supervisors.length === 0 ? (
+              <div style={{ padding: 24, color: '#8892a4', fontSize: 12, textAlign: 'center' }}>No supervisors added yet.</div>
+            ) : (
+              supervisors.map((sup) => (
+                <div key={sup.id} style={{ padding: '12px 20px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
+                    {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
+                    {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
+                      {sup.active ? 'Active' : 'Off'}
+                    </button>
+                    <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                      <Trash2 size={13} color="#ef4444" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {settingsSubTab === 'trucks' && (
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>OCPP ID Configuration</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -285,56 +467,8 @@ function SettingsTab({ trucks, onRefresh }) {
         </div>
       </div>
 
-      {/* Right: supervisors */}
-      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2e3347' }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Users size={14} /> SOC Alert Supervisors
-          </div>
-          <div style={{ fontSize: 11, color: '#8892a4', marginTop: 3 }}>Receive SMS + email when a truck hits its SOC threshold</div>
-        </div>
-
-        {/* Add form */}
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #2e3347', background: '#1e2535' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            <input style={inp} placeholder="Name *" value={newSup.name} onChange={(e) => setNewSup({ ...newSup, name: e.target.value })} />
-            <input style={inp} placeholder="Phone (+14081234567)" value={newSup.phone} onChange={(e) => setNewSup({ ...newSup, phone: e.target.value })} />
-            <input style={inp} placeholder="Email" value={newSup.email} onChange={(e) => setNewSup({ ...newSup, email: e.target.value })} />
-            <button
-              onClick={addSupervisor}
-              disabled={addingSup || !newSup.name.trim()}
-              style={{ background: !newSup.name.trim() ? '#22263a' : '#47a141', border: 'none', borderRadius: 7, padding: '8px 0', color: !newSup.name.trim() ? '#6b7280' : '#fff', fontWeight: 700, fontSize: 12, cursor: !newSup.name.trim() ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-            >
-              <Plus size={12} /> Add Supervisor
-            </button>
-          </div>
-        </div>
-
-        {/* List */}
-        {loadingSup ? (
-          <div style={{ padding: 24, color: '#8892a4', fontSize: 12 }}>Loading...</div>
-        ) : supervisors.length === 0 ? (
-          <div style={{ padding: 24, color: '#8892a4', fontSize: 12, textAlign: 'center' }}>No supervisors added yet.</div>
-        ) : (
-          supervisors.map((sup) => (
-            <div key={sup.id} style={{ padding: '12px 20px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
-                {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
-                {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
-              </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
-                  {sup.active ? 'Active' : 'Off'}
-                </button>
-                <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-                  <Trash2 size={13} color="#ef4444" />
-                </button>
-              </div>
-            </div>
-          ))
-        )}
       </div>
+      )}
     </div>
   );
 }

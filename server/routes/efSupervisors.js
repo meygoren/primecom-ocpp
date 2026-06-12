@@ -2,6 +2,43 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
 
+// GET /api/ef-supervisors/settings
+router.get('/settings', async (req, res) => {
+  const { data, error } = await supabase.from('ef_settings').select('*').limit(1).single();
+  if (error) return res.json({ soc_alerts_enabled: true });
+  res.json(data);
+});
+
+// PUT /api/ef-supervisors/settings
+router.put('/settings', async (req, res) => {
+  const { soc_alerts_enabled, custom_message } = req.body;
+  const updates = { updated_at: new Date().toISOString() };
+  if (soc_alerts_enabled !== undefined) updates.soc_alerts_enabled = soc_alerts_enabled;
+  if (custom_message !== undefined) updates.custom_message = custom_message;
+
+  const { data: existing } = await supabase.from('ef_settings').select('id').limit(1).single();
+  if (existing) {
+    await supabase.from('ef_settings').update(updates).eq('id', existing.id);
+  } else {
+    await supabase.from('ef_settings').insert({ soc_alerts_enabled: true, custom_message: custom_message || null });
+  }
+  res.json({ ok: true });
+});
+
+// POST /api/ef-supervisors/test-sms
+router.post('/test-sms', async (req, res) => {
+  const { data: supervisors } = await supabase.from('ef_supervisors').select('*').eq('active', true);
+  if (!supervisors?.length) return res.status(400).json({ error: 'No active supervisors to send to' });
+
+  const { sendSms } = require('../services/alertService');
+  const msg = 'Primecom OCPP — Test alert: SMS notifications are working correctly.';
+  let sent = 0;
+  for (const sup of supervisors) {
+    if (sup.phone) { await sendSms(sup.phone, msg); sent++; }
+  }
+  res.json({ ok: true, sent, recipients: supervisors.filter((s) => s.phone).map((s) => s.name) });
+});
+
 // GET /api/ef-supervisors — list all supervisors
 router.get('/', async (req, res) => {
   const { data, error } = await supabase

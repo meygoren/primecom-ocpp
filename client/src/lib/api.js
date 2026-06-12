@@ -76,6 +76,9 @@ export const api = {
   addEfSupervisor: (body) => request('/api/ef-supervisors', { method: 'POST', body: JSON.stringify(body) }),
   updateEfSupervisor: (id, body) => request(`/api/ef-supervisors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteEfSupervisor: (id) => request(`/api/ef-supervisors/${id}`, { method: 'DELETE' }),
+  getEfSettings: () => request('/api/ef-supervisors/settings'),
+  saveEfSettings: (body) => request('/api/ef-supervisors/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  sendTestSms: () => request('/api/ef-supervisors/test-sms', { method: 'POST' }),
 
   // Admin — user management
   adminGetUsers: () => request('/api/admin/users'),

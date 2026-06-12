@@ -132,12 +132,17 @@ async function checkChargeTruckAlert(chargePointId, soc) {
       }
 
       const { data: supervisors } = await supabase.from('ef_supervisors').select('*').eq('active', true);
-      if (!supervisors?.length) { console.log('[ChargeTruck Alert] No active supervisors'); continue; }
+      // Check global toggle and get custom message
+    const { data: settings } = await supabase.from('ef_settings').select('soc_alerts_enabled, custom_message').limit(1).single();
+    if (settings && settings.soc_alerts_enabled === false) { console.log('[ChargeTruck Alert] Alerts disabled in settings'); continue; }
+
+    if (!supervisors?.length) { console.log('[ChargeTruck Alert] No active supervisors'); continue; }
 
       const sideLabel = side === 'passenger' ? 'Passenger' : 'Driver';
       const otherLabel = side === 'passenger' ? 'Driver' : 'Passenger';
       const truckLabel = truck.label || `Truck ${truck.truck_number}`;
-      const msg = `${truckLabel} ${sideLabel} reached ${Math.round(soc)}%${otherSoc !== null ? `, ${otherLabel} is at ${Math.round(otherSoc)}%` : ''}. Ready for deployment.`;
+      const defaultMsg = `${truckLabel} ${sideLabel} reached ${Math.round(soc)}%${otherSoc !== null ? `, ${otherLabel} is at ${Math.round(otherSoc)}%` : ''}. Ready for deployment.`;
+      const msg = (settings?.custom_message?.trim()) ? settings.custom_message : defaultMsg;
 
       const { sendSms, sendEmail } = require('../services/alertService');
       for (const sup of supervisors) {
