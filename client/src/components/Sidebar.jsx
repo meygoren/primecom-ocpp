@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 const ADMIN_OPERATOR_NAV = [
   { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  settingKey: null },
@@ -12,6 +13,7 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
   { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
+  { to: '/issues',         icon: AlertTriangle,   label: 'Issues',         settingKey: null, badge: true },
   { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 
@@ -26,11 +28,13 @@ const VIEWER_NAV = [
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
   { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
+  { to: '/issues',         icon: AlertTriangle,   label: 'Issues',         settingKey: null, badge: true },
   { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 
 const DRIVER_NAV = [
-  { to: '/', icon: BatteryCharging, label: 'My Charger', settingKey: null },
+  { to: '/',       icon: BatteryCharging, label: 'My Charger', settingKey: null },
+  { to: '/issues', icon: AlertTriangle,   label: 'Issues',     settingKey: null, badge: true },
 ];
 
 function getNavItems(role) {
@@ -62,17 +66,30 @@ export default function Sidebar() {
   const profile = useProfile();
   const role = profile?.role;
 
-  const [navItems, setNavItems] = useState(() => getNavItems(role));
+  const [navItems,    setNavItems]    = useState(() => getNavItems(role));
+  const [issueCount,  setIssueCount]  = useState(0);
 
-  useEffect(() => {
-    setNavItems(getNavItems(role));
-  }, [role]);
+  useEffect(() => { setNavItems(getNavItems(role)); }, [role]);
 
   useEffect(() => {
     function onStorage() { setNavItems(getNavItems(role)); }
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, [role]);
+
+  // Poll open issue count for the badge
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const data = await api.getIssueOpenCount();
+        if (!cancelled) setIssueCount(data.count || 0);
+      } catch {}
+    }
+    poll();
+    const iv = setInterval(poll, 60000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, []);
 
   const roleInfo = ROLE_LABELS[role] || null;
 
@@ -101,7 +118,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav style={{ padding: '12px 12px', flex: 1 }}>
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {navItems.map(({ to, icon: Icon, label, badge }) => (
           <NavLink
             key={to}
             to={to}
@@ -122,7 +139,24 @@ export default function Sidebar() {
             })}
           >
             <Icon size={16} />
-            {label}
+            <span style={{ flex: 1 }}>{label}</span>
+            {badge && issueCount > 0 && (
+              <span style={{
+                minWidth: 18,
+                height: 18,
+                borderRadius: 999,
+                background: '#ef4444',
+                color: '#fff',
+                fontSize: 9,
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 4px',
+              }}>
+                {issueCount > 99 ? '99+' : issueCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

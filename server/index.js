@@ -31,6 +31,7 @@ const chargeTrucksRouter = require('./routes/chargeTrucks');
 const efSupervisorsRouter = require('./routes/efSupervisors');
 const billingRouter = require('./routes/billing');
 const { startWeeklyCron } = require('./routes/billing');
+const issuesRouter = require('./routes/issues');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -63,6 +64,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/charge-trucks', chargeTrucksRouter);
 app.use('/api/ef-supervisors', efSupervisorsRouter);
 app.use('/api/billing', billingRouter);
+app.use('/api/issues', issuesRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);
