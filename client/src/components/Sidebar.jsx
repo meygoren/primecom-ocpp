@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 
@@ -11,6 +11,7 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/rfid',           icon: CreditCard,      label: 'RFID Tags',      settingKey: 'nav_rfid_tags' },
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
+  { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
   { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 
@@ -24,6 +25,7 @@ const VIEWER_NAV = [
   { to: '/logs',           icon: ScrollText,      label: 'Logs',           settingKey: null },
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
+  { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
   { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
 ];
 

@@ -89,4 +89,10 @@ export const api = {
   adminGetUserChargers: (id) => request(`/api/admin/users/${id}/chargers`),
   adminSetUserChargers: (id, charger_ids) =>
     request(`/api/admin/users/${id}/chargers`, { method: 'PUT', body: JSON.stringify({ charger_ids }) }),
+
+  // Billing
+  getBillingSummary: (period) => request(`/api/billing/summary?period=${period}`),
+  getBillingSettings: () => request('/api/billing/settings'),
+  saveBillingSettings: (body) => request('/api/billing/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  sendBillingReport: () => request('/api/billing/send-report', { method: 'POST' }),
 };
