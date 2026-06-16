@@ -34,6 +34,8 @@ const { startWeeklyCron } = require('./routes/billing');
 const issuesRouter = require('./routes/issues');
 const exportRouter = require('./routes/export');
 const vehiclesRouter = require('./routes/vehicles');
+const employeesRouter = require('./routes/employees');
+const schedulesRouter = require('./routes/schedules');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -69,6 +71,8 @@ app.use('/api/billing', billingRouter);
 app.use('/api/issues', issuesRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/vehicles', vehiclesRouter);
+app.use('/api/employees', employeesRouter);
+app.use('/api/schedules', schedulesRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);
