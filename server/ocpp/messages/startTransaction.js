@@ -30,6 +30,46 @@ async function handleStartTransaction(chargePointId, payload) {
     .update({ status: 'charging', last_seen: new Date().toISOString() })
     .eq('charger_id', chargePointId);
 
+  // Auto-assign truck to bay if idTag matches a configured MAC address
+  if (idTag) {
+    try {
+      const { data: profiles } = await supabase
+        .from('ef_truck_profiles')
+        .select('*');
+
+      if (profiles && profiles.length > 0) {
+        const tagLower = idTag.toLowerCase().replace(/[:-]/g, '');
+        const match = profiles.find((p) => {
+          const pMac = (p.passenger_mac || '').toLowerCase().replace(/[:-]/g, '');
+          const dMac = (p.driver_mac || '').toLowerCase().replace(/[:-]/g, '');
+          return (pMac && pMac === tagLower) || (dMac && dMac === tagLower);
+        });
+
+        if (match) {
+          const truckLabel = match.label || `TRUCK ${match.truck_number}`;
+          // Find which bay slot this charger belongs to
+          const { data: slot } = await supabase
+            .from('ef_warehouse_chargers')
+            .select('slot')
+            .eq('ocpp_id', chargePointId)
+            .single();
+
+          if (slot) {
+            // Slots 1-2 = Bay A, slots 3-4 = Bay B
+            const baySlots = slot.slot <= 2 ? [1, 2] : [3, 4];
+            await supabase
+              .from('ef_warehouse_chargers')
+              .update({ current_truck_label: truckLabel })
+              .in('slot', baySlots);
+            console.log(`[StartTransaction] Auto-assigned ${truckLabel} to bay slots ${baySlots} via MAC match on ${chargePointId}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[StartTransaction] Truck auto-assign error:', err.message);
+    }
+  }
+
   return {
     transactionId,
     idTagInfo: { status: 'Accepted' },

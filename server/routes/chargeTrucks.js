@@ -139,11 +139,12 @@ router.get('/warehouse', async (req, res) => {
 // PATCH /api/charge-trucks/warehouse/:id — update warehouse charger fields
 router.patch('/warehouse/:id', async (req, res) => {
   const { id } = req.params;
-  const { label, ocpp_id } = req.body;
+  const { label, ocpp_id, current_truck_label } = req.body;
 
   const updates = {};
   if (label !== undefined) updates.label = label;
   if (ocpp_id !== undefined) updates.ocpp_id = ocpp_id;
+  if (current_truck_label !== undefined) updates.current_truck_label = current_truck_label;
 
   const { data, error } = await supabase
     .from('ef_warehouse_chargers')
@@ -154,6 +155,61 @@ router.patch('/warehouse/:id', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// PATCH /api/charge-trucks/warehouse/bay/:bay/truck — assign a truck label to an entire bay
+// bay = 'A' or 'B'; slots 1-2 = Bay A, slots 3-4 = Bay B
+router.patch('/warehouse/bay/:bay/truck', async (req, res) => {
+  const { bay } = req.params;
+  const { current_truck_label } = req.body;
+
+  const slotFilter = bay === 'A' ? [1, 2] : [3, 4];
+
+  const { data, error } = await supabase
+    .from('ef_warehouse_chargers')
+    .update({ current_truck_label: current_truck_label || null })
+    .in('slot', slotFilter)
+    .select();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true, updated: data });
+});
+
+// GET /api/charge-trucks/truck-profiles — list all truck profiles
+router.get('/truck-profiles', async (req, res) => {
+  const { data, error } = await supabase
+    .from('ef_truck_profiles')
+    .select('*')
+    .order('truck_number', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/charge-trucks/truck-profiles — upsert a truck profile by truck_number
+router.post('/truck-profiles', async (req, res) => {
+  const { truck_number, label, passenger_mac, driver_mac } = req.body;
+  if (!truck_number || truck_number < 1 || truck_number > 6) {
+    return res.status(400).json({ error: 'truck_number must be 1-6' });
+  }
+
+  const { data: existing } = await supabase
+    .from('ef_truck_profiles')
+    .select('id')
+    .eq('truck_number', truck_number)
+    .single();
+
+  const updates = { truck_number, label: label || null, passenger_mac: passenger_mac || null, driver_mac: driver_mac || null };
+
+  let result;
+  if (existing) {
+    result = await supabase.from('ef_truck_profiles').update(updates).eq('truck_number', truck_number).select().single();
+  } else {
+    result = await supabase.from('ef_truck_profiles').insert(updates).select().single();
+  }
+
+  if (result.error) return res.status(500).json({ error: result.error.message });
+  res.json(result.data);
 });
 
 // GET /api/charge-trucks — list all trucks with live data
