@@ -51,7 +51,7 @@ const ALL_COMMANDS = [
   },
 ];
 
-export default function CommandPanel({ chargerId }) {
+export default function CommandPanel({ chargerId, activeSession }) {
   const profile = useProfile();
   const canCommand = profile?.role === 'admin' || profile?.role === 'operator';
 
@@ -68,7 +68,14 @@ export default function CommandPanel({ chargerId }) {
 
   function openCommand(cmd) {
     const defaults = {};
-    cmd.fields.forEach((f) => (defaults[f.name] = f.default));
+    cmd.fields.forEach((f) => {
+      // Auto-fill Remote Stop transaction ID from the active session
+      if (f.name === 'transactionId' && activeSession?.transaction_id) {
+        defaults[f.name] = String(activeSession.transaction_id);
+      } else {
+        defaults[f.name] = f.default;
+      }
+    });
     setValues(defaults);
     setActive(cmd);
     setResult(null);
@@ -109,27 +116,37 @@ export default function CommandPanel({ chargerId }) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {COMMANDS.map((cmd) => (
-          <button
-            key={cmd.key}
-            onClick={() => openCommand(cmd)}
-            style={{
-              background: active?.key === cmd.key ? '#2d5c2a33' : '#22263a',
-              border: `1px solid ${active?.key === cmd.key ? '#47a141' : '#2e3347'}`,
-              borderRadius: 8,
-              padding: '10px 14px',
-              cursor: 'pointer',
-              textAlign: 'left',
-              color: '#f1f5f9',
-              fontSize: 14,
-              fontWeight: 500,
-              transition: 'all 0.15s',
-            }}
-          >
-            {cmd.label}
-            <div style={{ fontSize: 11, color: '#8892a4', marginTop: 2 }}>{cmd.description}</div>
-          </button>
-        ))}
+        {COMMANDS.map((cmd) => {
+          const hasActiveTx = cmd.key === 'remote-stop' && activeSession?.transaction_id;
+          return (
+            <button
+              key={cmd.key}
+              onClick={() => openCommand(cmd)}
+              style={{
+                background: active?.key === cmd.key ? '#2d5c2a33' : '#22263a',
+                border: `1px solid ${active?.key === cmd.key ? '#47a141' : '#2e3347'}`,
+                borderRadius: 8,
+                padding: '10px 14px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                color: '#f1f5f9',
+                fontSize: 14,
+                fontWeight: 500,
+                transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                {cmd.label}
+                {hasActiveTx && (
+                  <span style={{ fontSize: 9, fontWeight: 700, background: '#3b82f622', color: '#3b82f6', border: '1px solid #3b82f644', borderRadius: 999, padding: '1px 6px', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                    Active tx
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: '#8892a4', marginTop: 2 }}>{cmd.description}</div>
+            </button>
+          );
+        })}
       </div>
 
       {active && (

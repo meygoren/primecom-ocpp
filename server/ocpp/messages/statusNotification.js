@@ -1,4 +1,5 @@
 const supabase = require('../../db/supabase');
+const connections = require('../../state/connections');
 
 // Maps OCPP connector status to our internal status
 function mapStatus(ocppStatus) {
@@ -52,6 +53,41 @@ async function handleStatusNotification(chargePointId, payload) {
 
   if (error) {
     console.error(`[StatusNotification] DB error for ${chargePointId}:`, error.message);
+  }
+
+  // Plug-and-charge auto-start: when a connector enters "Preparing" (vehicle
+  // plugged in) and auto_start is enabled for this charger, fire a
+  // RemoteStartTransaction automatically so the driver doesn't need to
+  // authorise at the charger or in the app.
+  if (status === 'Preparing' && connectorId > 0) {
+    try {
+      const { data: chargerRow } = await supabase
+        .from('chargers')
+        .select('auto_start_enabled, auto_start_id_tag')
+        .eq('charger_id', chargePointId)
+        .single();
+
+      if (chargerRow?.auto_start_enabled) {
+        // Small delay so the charger finishes its Preparing state before we
+        // send the command — some chargers reject immediate remote-start.
+        setTimeout(async () => {
+          if (!connections.has(chargePointId)) {
+            console.log(`[AutoStart] Skipped ${chargePointId} — not connected`);
+            return;
+          }
+          const remoteStart = require('../commands/remoteStartTransaction');
+          const idTag = chargerRow.auto_start_id_tag || 'AUTO';
+          try {
+            await remoteStart(chargePointId, connectorId, idTag);
+            console.log(`[AutoStart] Sent RemoteStartTransaction to ${chargePointId} connector ${connectorId} idTag ${idTag}`);
+          } catch (err) {
+            console.error(`[AutoStart] RemoteStartTransaction failed for ${chargePointId}:`, err.message);
+          }
+        }, 2000);
+      }
+    } catch (err) {
+      console.error(`[AutoStart] Check error for ${chargePointId}:`, err.message);
+    }
   }
 
   return {};

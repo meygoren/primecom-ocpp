@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
 
+// GET /api/sessions/active/:chargerId — current open session (no stop_time)
+// Used by the command panel to auto-fill the Remote Stop transaction ID.
+router.get('/active/:chargerId', async (req, res) => {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .eq('charger_id', req.params.chargerId)
+    .is('stop_time', null)
+    .order('start_time', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || null);
+});
+
 // GET /api/sessions — list sessions with optional filters
 // Query params: charger_id, limit (default 100), offset (default 0)
 router.get('/', async (req, res) => {

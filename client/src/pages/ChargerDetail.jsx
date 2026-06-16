@@ -43,14 +43,18 @@ export default function ChargerDetail() {
   const showFirmwareTab = localStorage.getItem('settings_feat_firmware_tab') !== 'false';
   const showNotesEdit = localStorage.getItem('settings_feat_notes_edit') !== 'false';
 
+  const [activeSession, setActiveSession] = useState(null);
+
   async function load() {
     try {
-      const [c, s] = await Promise.all([
+      const [c, s, active] = await Promise.all([
         api.getCharger(id),
         api.getSessions({ charger_id: id, limit: 20 }),
+        api.getActiveSession(id).catch(() => null),
       ]);
       setCharger(c);
       setSessions(s);
+      setActiveSession(active);
     } catch (err) {
       console.error(err);
     } finally {
@@ -60,7 +64,9 @@ export default function ChargerDetail() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10000);
+    // Poll every 5s — keeps the WebSocket connected badge accurate and
+    // refreshes the active session transaction ID for Remote Stop.
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -169,9 +175,10 @@ export default function ChargerDetail() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
             <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>{charger.charger_id}</h1>
             <StatusBadge status={charger.status} />
-            {!charger.connected && (
-              <span style={{ fontSize: 11, color: '#f59e0b', background: '#3f2a00', padding: '2px 8px', borderRadius: 999 }}>No WS connection</span>
-            )}
+            {charger.connected
+              ? <span style={{ fontSize: 11, color: '#47a141', background: '#1a2e1a', padding: '2px 8px', borderRadius: 999 }}>WebSocket live</span>
+              : <span style={{ fontSize: 11, color: '#f59e0b', background: '#3f2a00', padding: '2px 8px', borderRadius: 999 }} title="The charger is online and sending data but may be mid-reconnect. Commands will still work.">No WS connection</span>
+            }
           </div>
           <div style={{ fontSize: 13, color: '#8892a4' }}>
             {charger.vendor} {charger.model} &bull; FW: {charger.firmware_version || '—'} &bull; {charger.location_label || 'No location'}
@@ -269,6 +276,70 @@ export default function ChargerDetail() {
                 onCancel={() => setEditingField(null)}
                 onFieldValueChange={setFieldValue}
               />
+
+              {/* Auto-start (plug and charge) */}
+              <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', marginBottom: 4 }}>Auto-Start (Plug & Charge)</div>
+                    <div style={{ fontSize: 12, color: '#8892a4', lineHeight: 1.5 }}>
+                      Automatically sends RemoteStartTransaction when a vehicle is plugged in (Preparing state). No manual authorisation needed.
+                    </div>
+                    {charger.auto_start_enabled && (
+                      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: '#8892a4' }}>ID Tag:</span>
+                        {editingField === 'auto_start_id_tag' ? (
+                          <span style={{ display: 'flex', gap: 6 }}>
+                            <input
+                              value={fieldValue}
+                              onChange={(e) => setFieldValue(e.target.value)}
+                              style={{ background: '#1a1d27', border: '1px solid #47a141', borderRadius: 5, padding: '4px 8px', color: '#f1f5f9', fontSize: 12, width: 130 }}
+                            />
+                            <button onClick={() => saveField('auto_start_id_tag')} disabled={fieldSaving} style={{ background: '#47a141', border: 'none', borderRadius: 5, padding: '4px 8px', color: '#fff', fontSize: 11, cursor: 'pointer' }}>Save</button>
+                            <button onClick={() => setEditingField(null)} style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 5, padding: '4px 8px', color: '#8892a4', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                          </span>
+                        ) : (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <code style={{ background: '#1a1d27', borderRadius: 4, padding: '2px 7px', fontSize: 12, color: '#3b82f6' }}>{charger.auto_start_id_tag || 'AUTO'}</code>
+                            {showNotesEdit && <button onClick={() => { setEditingField('auto_start_id_tag'); setFieldValue(charger.auto_start_id_tag || ''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8892a4', padding: 0, lineHeight: 0 }}><Pencil size={12} /></button>}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {showNotesEdit && (
+                    <button
+                      onClick={async () => {
+                        const next = !charger.auto_start_enabled;
+                        const updated = await api.updateCharger(id, { auto_start_enabled: next });
+                        setCharger((prev) => ({ ...prev, ...updated }));
+                      }}
+                      style={{
+                        width: 44,
+                        height: 26,
+                        borderRadius: 999,
+                        border: 'none',
+                        background: charger.auto_start_enabled ? '#47a141' : '#2e3347',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      <span style={{
+                        position: 'absolute',
+                        top: 3,
+                        left: charger.auto_start_enabled ? 22 : 3,
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left 0.2s',
+                      }} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -537,7 +608,7 @@ export default function ChargerDetail() {
 
         {/* Command panel */}
         <div>
-          <CommandPanel chargerId={charger.charger_id} />
+          <CommandPanel chargerId={charger.charger_id} activeSession={activeSession} />
         </div>
       </div>
     </div>
