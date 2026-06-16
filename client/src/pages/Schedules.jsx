@@ -1,504 +1,625 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Star, CheckCircle, XCircle, Send, Plus, Trash2, Settings, X } from 'lucide-react';
-import { useProfile } from '../contexts/ProfileContext';
 import { api } from '../lib/api';
+import { useProfile } from '../contexts/ProfileContext';
 
-const COLORS = {
-  bg: '#0f1117', card: '#1a1d27', border: '#2e3347',
-  text: '#f1f5f9', muted: '#8892a4', accent: '#47a141',
-};
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-function getWeekDates(dateStr) {
-  const date = dateStr ? new Date(dateStr) : new Date();
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(date);
-  monday.setDate(diff);
-  monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const FALLBACK_SHIFTS = [
+  { id: 'day', name: 'Day Shift', start_time: '06:00', end_time: '18:00', color: '#3b82f6' },
+  { id: 'night', name: 'Night Shift', start_time: '18:00', end_time: '06:00', color: '#a855f7' },
+];
+
+// ── Test data ─────────────────────────────────────────────────────────────────
+
+const DEMO_EMPS = [
+  { id: 'de1', first_name: 'Marcus', last_name: 'Thompson', role: 'driver' },
+  { id: 'de2', first_name: 'Jasmine', last_name: 'Rivera', role: 'driver' },
+  { id: 'de3', first_name: 'Terrence', last_name: 'Washington', role: 'driver' },
+  { id: 'de4', first_name: 'Alyssa', last_name: 'Chen', role: 'driver' },
+  { id: 'de5', first_name: 'Kevin', last_name: 'Park', role: 'admin' },
+];
+
+const DEMO_TIME_OFF = [
+  { id: 'tor1', employee_id: 'de2', start_date: '2026-06-23', end_date: '2026-06-25', reason: 'Vacation', status: 'pending', employees: { first_name: 'Jasmine', last_name: 'Rivera' } },
+  { id: 'tor2', employee_id: 'de4', start_date: '2026-07-04', end_date: '2026-07-04', reason: 'Holiday', status: 'approved', employees: { first_name: 'Alyssa', last_name: 'Chen' } },
+];
+
+function buildDemoAssignments(monday) {
+  const result = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(monday, i);
+    const isWeekend = i >= 5;
+    result.push({ id: `d-day-${d}-1`, employee_id: 'de1', shift_id: 'day', work_date: d, is_supervisor: true, employees: { first_name: 'Marcus', last_name: 'Thompson' }, shifts: FALLBACK_SHIFTS[0] });
+    if (!isWeekend) {
+      result.push({ id: `d-day-${d}-2`, employee_id: 'de2', shift_id: 'day', work_date: d, is_supervisor: false, employees: { first_name: 'Jasmine', last_name: 'Rivera' }, shifts: FALLBACK_SHIFTS[0] });
+      result.push({ id: `d-night-${d}-3`, employee_id: 'de3', shift_id: 'night', work_date: d, is_supervisor: true, employees: { first_name: 'Terrence', last_name: 'Washington' }, shifts: FALLBACK_SHIFTS[1] });
+      result.push({ id: `d-night-${d}-4`, employee_id: 'de4', shift_id: 'night', work_date: d, is_supervisor: false, employees: { first_name: 'Alyssa', last_name: 'Chen' }, shifts: FALLBACK_SHIFTS[1] });
+    }
+  }
+  return result;
 }
 
-function toISO(date) { return date.toISOString().slice(0, 10); }
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getMondayStr(offset = 0) {
+  const d = new Date();
+  const day = d.getDay();
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function fmtWeekRange(monday) {
+  const sunday = addDays(monday, 6);
+  const m = new Date(monday + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const s = new Date(sunday + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${m} – ${s}`;
+}
 
 function StatusBadge({ status }) {
-  const map = { pending: '#f59e0b', approved: '#47a141', denied: '#ef4444' };
-  const color = map[status] || '#6b7280';
+  const c = { pending: '#f59e0b', approved: '#47a141', denied: '#ef4444' }[status] || '#6b7280';
   return (
-    <span style={{ background: color + '22', color, border: `1px solid ${color}44`, borderRadius: 6, padding: '2px 10px', fontSize: 12, fontWeight: 600, textTransform: 'capitalize' }}>{status}</span>
+    <span style={{ background: c + '22', color: c, border: `1px solid ${c}44`, borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>
+      {status}
+    </span>
   );
 }
 
-export default function Schedules() {
-  const profile = useProfile();
-  const userRole = profile?.role || 'driver';
-  const userEmail = profile?.email || '';
-  const isAdmin = userRole === 'admin';
+// ── Admin view ────────────────────────────────────────────────────────────────
 
-  const [currentWeek, setCurrentWeek] = useState(toISO(new Date()));
-  const [weekDates, setWeekDates] = useState(getWeekDates());
-  const [assignments, setAssignments] = useState([]);
-  const [shifts, setShifts] = useState([]);
+function AdminSchedule({ testMode }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [shifts, setShifts] = useState(FALLBACK_SHIFTS);
   const [employees, setEmployees] = useState([]);
-  const [timeOffRequests, setTimeOffRequests] = useState([]);
-  const [settings, setSettings] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [timeOffList, setTimeOffList] = useState([]);
+  const [settings, setSettings] = useState({ time_off_min_notice_days: 14, auto_notify_enabled: false, auto_notify_day: 'sunday', notify_via_sms: true, notify_via_email: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsForm, setSettingsForm] = useState({});
-  const [showAddCell, setShowAddCell] = useState(null);
+  const [activeCell, setActiveCell] = useState(null);
   const [addEmpId, setAddEmpId] = useState('');
-  const [addSupervisor, setAddSupervisor] = useState(false);
-  const [showTimeOffForm, setShowTimeOffForm] = useState(false);
-  const [timeOffForm, setTimeOffForm] = useState({ start_date: '', end_date: '', reason: '' });
-  const [saving, setSaving] = useState(false);
-  const [notifyMsg, setNotifyMsg] = useState('');
+  const [addIsSupervisor, setAddIsSupervisor] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState(null);
+  const [notifying, setNotifying] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
-  const loadAdminData = useCallback(async () => {
+  const monday = getMondayStr(weekOffset);
+
+  const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    if (testMode) {
+      setAssignments(buildDemoAssignments(monday));
+      setShifts(FALLBACK_SHIFTS);
+      setEmployees(DEMO_EMPS);
+      setTimeOffList(DEMO_TIME_OFF);
+      setLoading(false);
+      return;
+    }
     try {
-      const [schedData, shiftsData, empData, toData, settData] = await Promise.all([
-        api.getSchedule(currentWeek),
+      const [sched, shiftsData, empData, torData, settData] = await Promise.all([
+        api.getSchedule(monday),
         api.getShifts(),
         api.getEmployees({ active: 'true' }),
         api.getTimeOffRequests(),
-        api.getScheduleSettings()
+        api.getScheduleSettings(),
       ]);
-      if (schedData.error) throw new Error(schedData.error);
-      setAssignments(schedData.assignments || []);
-      setShifts(Array.isArray(shiftsData) ? shiftsData : []);
+      setAssignments(sched.assignments || []);
+      setShifts(Array.isArray(shiftsData) && shiftsData.length ? shiftsData : FALLBACK_SHIFTS);
       setEmployees(Array.isArray(empData) ? empData : []);
-      setTimeOffRequests(Array.isArray(toData) ? toData : []);
-      if (settData && !settData.error) { setSettings(settData); setSettingsForm(settData); }
-      setWeekDates(getWeekDates(currentWeek));
-    } catch (e) {
-      setError(e.message);
+      setTimeOffList(Array.isArray(torData) ? torData : []);
+      if (settData && !settData.error) setSettings(settData);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [currentWeek]);
+  }, [monday, testMode]);
 
-  const loadDriverData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [schedData, shiftsData, toData] = await Promise.all([
-        api.getMySchedule(userEmail, currentWeek),
-        api.getShifts(),
-        api.getTimeOffRequests()
-      ]);
-      setAssignments(schedData.assignments || []);
-      setShifts(Array.isArray(shiftsData) ? shiftsData : []);
-      setWeekDates(getWeekDates(currentWeek));
-      setTimeOffRequests(Array.isArray(toData) ? toData : []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentWeek, userEmail]);
+  useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (isAdmin) loadAdminData();
-    else loadDriverData();
-  }, [isAdmin, loadAdminData, loadDriverData]);
-
-  const prevWeek = () => {
-    const d = new Date(currentWeek);
-    d.setDate(d.getDate() - 7);
-    setCurrentWeek(toISO(d));
-  };
-  const nextWeek = () => {
-    const d = new Date(currentWeek);
-    d.setDate(d.getDate() + 7);
-    setCurrentWeek(toISO(d));
-  };
-
-  const getCellAssignments = (shiftId, date) => {
-    const dateStr = toISO(date);
-    return assignments.filter(a => a.shift_id === shiftId && a.work_date === dateStr);
-  };
-
-  const handleAddAssignment = async () => {
-    if (!addEmpId || !showAddCell) return;
-    setSaving(true);
-    try {
-      await api.createAssignment({
-        employee_id: addEmpId,
-        shift_id: showAddCell.shiftId,
-        work_date: showAddCell.date,
-        is_supervisor: addSupervisor
-      });
-      setShowAddCell(null);
-      setAddEmpId('');
-      setAddSupervisor(false);
-      if (isAdmin) loadAdminData(); else loadDriverData();
-    } catch (e) {
-      alert('Error: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteAssignment = async (id) => {
-    await api.deleteAssignment(id);
-    if (isAdmin) loadAdminData(); else loadDriverData();
-  };
-
-  const handleReviewTimeOff = async (id, status) => {
-    await api.reviewTimeOffRequest(id, status);
-    loadAdminData();
-  };
-
-  const handleSubmitTimeOff = async () => {
-    setSaving(true);
-    try {
-      // Find the employee record matching this user's email
-      const emps = await api.getEmployees({ search: userEmail });
-      const emp = Array.isArray(emps) ? emps.find(e => e.email === userEmail) : null;
-      if (!emp) throw new Error('Employee record not found for your email. Ask an admin to add you as an employee first.');
-      await api.createTimeOffRequest({ employee_id: emp.id, ...timeOffForm });
-      setShowTimeOffForm(false);
-      setTimeOffForm({ start_date: '', end_date: '', reason: '' });
-      loadDriverData();
-    } catch (e) {
-      alert('Error: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    setSaving(true);
-    try {
-      const updated = await api.updateScheduleSettings(settingsForm);
-      setSettings(updated);
-      setShowSettings(false);
-    } catch (e) {
-      alert('Error: ' + e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleNotify = async (method) => {
-    setNotifyMsg('Sending...');
-    try {
-      const res = await api.sendScheduleNotification(method);
-      if (res.method === 'sms_not_configured') setNotifyMsg('SMS not configured (Twilio env vars missing)');
-      else if (res.method === 'email_placeholder') setNotifyMsg(`Email placeholder — would notify ${res.count} drivers`);
-      else setNotifyMsg(`Sent ${method.toUpperCase()} to ${res.sent || res.count || 0} drivers`);
-      setTimeout(() => setNotifyMsg(''), 4000);
-    } catch (e) {
-      setNotifyMsg('Error: ' + e.message);
-    }
-  };
-
-  const inputStyle = {
-    background: '#0f1117', border: '1px solid #2e3347', borderRadius: 8,
-    color: '#f1f5f9', padding: '8px 12px', fontSize: 14, width: '100%', boxSizing: 'border-box'
-  };
-  const btnPrimary = { background: '#47a141', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
-
-  const weekLabel = weekDates.length === 7
-    ? `Week of ${weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-    : '';
-
-  if (error && (error.includes('does not exist') || error.includes('relation'))) {
-    return (
-      <div style={{ padding: 32, background: COLORS.bg, minHeight: '100vh', color: COLORS.text, fontFamily: 'Inter, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', maxWidth: 480 }}>
-          <Calendar size={48} color="#f59e0b" style={{ marginBottom: 16 }} />
-          <h2 style={{ color: '#f59e0b', marginBottom: 8 }}>Database tables not found</h2>
-          <p style={{ color: COLORS.muted }}>Run the SQL migration first. Open <code>supabase_migration_schedules.sql</code> in the repo root and paste it into the Supabase SQL editor.</p>
-        </div>
-      </div>
-    );
+  function showToast(msg, color = '#47a141') {
+    setToast({ msg, color });
+    setTimeout(() => setToast(null), 3000);
   }
 
-  return (
-    <div style={{ padding: 32, background: COLORS.bg, minHeight: '100vh', color: COLORS.text, fontFamily: 'Inter, sans-serif' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Calendar size={28} color={COLORS.accent} />
-          <div>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Schedules</h1>
-            <p style={{ margin: 0, color: COLORS.muted, fontSize: 14 }}>{weekLabel}</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {isAdmin && (
-            <>
-              {notifyMsg && <span style={{ color: COLORS.muted, fontSize: 13 }}>{notifyMsg}</span>}
-              <button onClick={() => handleNotify('sms')} style={{ ...btnPrimary, background: '#6366f1', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Send size={14} /> SMS Drivers
-              </button>
-              <button onClick={() => handleNotify('email')} style={{ ...btnPrimary, background: '#0ea5e9', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Send size={14} /> Email Drivers
-              </button>
-              <button onClick={() => setShowSettings(s => !s)} style={{ background: '#22263a', color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>
-                <Settings size={16} />
-              </button>
-            </>
-          )}
-          {!isAdmin && (
-            <button onClick={() => alert('Email schedule: coming soon')} style={{ ...btnPrimary, background: '#0ea5e9', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Send size={14} /> Email My Schedule
-            </button>
-          )}
-        </div>
-      </div>
+  async function handleAdd() {
+    if (!addEmpId || !activeCell) return;
+    if (testMode) { showToast('Demo mode — no changes saved'); return; }
+    setAdding(true);
+    try {
+      await api.createAssignment({ employee_id: addEmpId, shift_id: activeCell.shiftId, work_date: activeCell.date, is_supervisor: addIsSupervisor });
+      setAddEmpId('');
+      setAddIsSupervisor(false);
+      load();
+    } catch (err) { alert('Failed: ' + err.message); }
+    finally { setAdding(false); }
+  }
 
-      {/* Settings Panel (admin) */}
-      {isAdmin && showSettings && settings && (
-        <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20, marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 16 }}>Schedule Settings</h3>
-            <button onClick={() => setShowSettings(false)} style={{ background: 'none', border: 'none', color: COLORS.muted, cursor: 'pointer' }}><X size={16} /></button>
-          </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div>
-              <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Min Notice Days</label>
-              <input type="number" value={settingsForm.time_off_min_notice_days || 14}
-                onChange={e => setSettingsForm(f => ({ ...f, time_off_min_notice_days: parseInt(e.target.value) }))}
-                style={{ ...inputStyle, width: 80 }} />
-            </div>
-            <div>
-              <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Auto Notify Day</label>
-              <select value={settingsForm.auto_notify_day || 'sunday'} onChange={e => setSettingsForm(f => ({ ...f, auto_notify_day: e.target.value }))} style={{ ...inputStyle, width: 120 }}>
-                {['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
-              </select>
-            </div>
-            {[['auto_notify_enabled','Auto Notify'],['notify_via_sms','SMS'],['notify_via_email','Email']].map(([key, label]) => (
-              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: COLORS.text, fontSize: 14 }}>
-                <input type="checkbox" checked={!!settingsForm[key]} onChange={e => setSettingsForm(f => ({ ...f, [key]: e.target.checked }))} />
-                {label}
-              </label>
-            ))}
-            <button onClick={handleSaveSettings} disabled={saving} style={btnPrimary}>{saving ? 'Saving...' : 'Save Settings'}</button>
-          </div>
+  async function handleRemove(id) {
+    if (testMode) { showToast('Demo mode — no changes saved'); return; }
+    setRemoving(id);
+    try { await api.deleteAssignment(id); load(); }
+    catch (err) { alert('Failed: ' + err.message); }
+    finally { setRemoving(null); }
+  }
+
+  async function handleReviewTimeOff(id, status) {
+    if (testMode) { showToast('Demo mode — no changes saved'); return; }
+    try { await api.reviewTimeOffRequest(id, status); load(); }
+    catch (err) { alert('Failed: ' + err.message); }
+  }
+
+  async function handleNotify(method) {
+    setNotifying(method);
+    try {
+      await api.sendScheduleNotification(method);
+      showToast(`Schedule notification sent via ${method === 'sms' ? 'SMS' : 'email'}`);
+    } catch (err) { alert('Failed: ' + err.message); }
+    finally { setNotifying(null); }
+  }
+
+  async function handleSaveSettings() {
+    if (testMode) { showToast('Demo mode — no changes saved'); return; }
+    setSavingSettings(true);
+    try { await api.updateScheduleSettings(settings); showToast('Settings saved'); }
+    catch (err) { alert('Failed: ' + err.message); }
+    finally { setSavingSettings(false); }
+  }
+
+  function getCellAssignments(shiftId, date) {
+    return assignments.filter((a) => a.shift_id === shiftId && a.work_date === date);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const inpStyle = { background: '#0f1117', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 10px', color: '#f1f5f9', fontSize: 13, outline: 'none' };
+
+  return (
+    <div>
+      {toast && (
+        <div style={{ position: 'fixed', top: 20, right: 24, background: toast.color, color: '#fff', padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: '0 4px 20px #0006' }}>
+          {toast.msg}
         </div>
       )}
 
-      {/* Week Navigator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button onClick={prevWeek} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-          <ChevronLeft size={18} />
-        </button>
-        <span style={{ fontWeight: 600, fontSize: 15, flex: 1 }}>{weekLabel}</span>
-        <button onClick={nextWeek} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: 8, padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-          <ChevronRight size={18} />
-        </button>
+      {/* Week nav + send */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setWeekOffset((o) => o - 1)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>← Prev</button>
+          <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 14 }}>Week of {fmtWeekRange(monday)}</span>
+          <button onClick={() => setWeekOffset((o) => o + 1)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>Next →</button>
+          {weekOffset !== 0 && <button onClick={() => setWeekOffset(0)} style={{ background: 'none', border: 'none', color: '#47a141', fontSize: 12, cursor: 'pointer' }}>Today</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => handleNotify('sms')} disabled={!!notifying} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>
+            {notifying === 'sms' ? 'Sending...' : 'Send SMS'}
+          </button>
+          <button onClick={() => handleNotify('email')} disabled={!!notifying} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>
+            {notifying === 'email' ? 'Sending...' : 'Send Email'}
+          </button>
+        </div>
       </div>
 
-      {loading && <div style={{ padding: 40, textAlign: 'center', color: COLORS.muted }}>Loading...</div>}
-      {error && !error.includes('does not exist') && !error.includes('relation') && <div style={{ color: '#ef4444', padding: 16 }}>{error}</div>}
+      {error && (
+        <div style={{ background: '#1a1d27', border: '1px solid #ef444444', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, color: '#ef4444', marginBottom: 6 }}>Database migration required</div>
+          <div style={{ fontSize: 12, color: '#8892a4' }}>Run <code style={{ color: '#f59e0b' }}>supabase_migration_schedules.sql</code> in your Supabase SQL editor, then refresh.</div>
+        </div>
+      )}
 
-      {!loading && !error && (
+      {loading ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: '#8892a4' }}>Loading schedule...</div>
+      ) : (
         <>
-          {/* Admin: Weekly Grid */}
-          {isAdmin && (
-            <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 24 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    <th style={{ padding: '12px 16px', textAlign: 'left', color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', width: 120 }}>Shift</th>
-                    {weekDates.map(d => (
-                      <th key={toISO(d)} style={{ padding: '12px 8px', textAlign: 'center', color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase' }}>
-                        {d.toLocaleDateString('en-US', { weekday: 'short' })}<br />
-                        <span style={{ color: COLORS.text, fontWeight: 700, fontSize: 14 }}>{d.getDate()}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {shifts.map(shift => (
-                    <tr key={shift.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: shift.color }} />
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>{shift.name}</div>
-                            <div style={{ color: COLORS.muted, fontSize: 11 }}>{shift.start_time}–{shift.end_time}</div>
-                          </div>
-                        </div>
-                      </td>
-                      {weekDates.map(d => {
-                        const dateStr = toISO(d);
-                        const cellAssignments = getCellAssignments(shift.id, d);
+          {/* Grid */}
+          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+            {/* Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '130px repeat(7, 1fr)', borderBottom: '1px solid #2e3347' }}>
+              <div style={{ padding: '10px 14px', background: '#22263a', borderRight: '1px solid #2e3347' }} />
+              {DAYS.map((day, i) => {
+                const dateStr = addDays(monday, i);
+                const isToday = dateStr === today;
+                return (
+                  <div key={day} style={{ padding: '10px 8px', background: '#22263a', borderRight: i < 6 ? '1px solid #2e3347' : 'none', textAlign: 'center' }}>
+                    <div style={{ fontSize: 11, color: '#8892a4', fontWeight: 600 }}>{day}</div>
+                    <div style={{ fontSize: 14, color: isToday ? '#47a141' : '#f1f5f9', fontWeight: isToday ? 800 : 400 }}>
+                      {new Date(dateStr + 'T12:00:00').getDate()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Shift rows */}
+            {shifts.map((shift, si) => (
+              <div key={shift.id} style={{ display: 'grid', gridTemplateColumns: '130px repeat(7, 1fr)', borderBottom: si < shifts.length - 1 ? '1px solid #2e3347' : 'none', minHeight: 80 }}>
+                <div style={{ padding: '12px 14px', borderRight: '1px solid #2e3347', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: shift.color }}>{shift.name}</div>
+                  <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>{shift.start_time}–{shift.end_time}</div>
+                </div>
+                {DAYS.map((day, di) => {
+                  const dateStr = addDays(monday, di);
+                  const cellA = getCellAssignments(shift.id, dateStr);
+                  const isActive = activeCell?.shiftId === shift.id && activeCell?.date === dateStr;
+                  return (
+                    <div
+                      key={day}
+                      onClick={() => setActiveCell(isActive ? null : { shiftId: shift.id, date: dateStr })}
+                      style={{ padding: '6px 5px', borderRight: di < 6 ? '1px solid #2e3347' : 'none', background: isActive ? '#22263a' : 'transparent', cursor: 'pointer', minHeight: 80, display: 'flex', flexDirection: 'column', gap: 3 }}
+                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = '#22263a44'; }}
+                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {cellA.map((a) => {
+                        const emp = a.employees || {};
+                        const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || '?';
                         return (
-                          <td key={dateStr} style={{ padding: 6, verticalAlign: 'top', minHeight: 60 }}>
-                            <div style={{ minHeight: 50, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {cellAssignments.map(a => (
-                                <div key={a.id} style={{
-                                  background: '#22263a', border: `1px solid ${COLORS.border}`, borderRadius: 6,
-                                  padding: '3px 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4
-                                }}>
-                                  {a.is_supervisor && <Star size={10} color="#f59e0b" fill="#f59e0b" />}
-                                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {a.employees ? `${a.employees.first_name} ${a.employees.last_name}` : '—'}
-                                  </span>
-                                  <button onClick={() => handleDeleteAssignment(a.id)} style={{ background: 'none', border: 'none', color: '#ef444488', cursor: 'pointer', padding: 0, lineHeight: 1 }}>
-                                    <X size={10} />
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                onClick={() => setShowAddCell({ shiftId: shift.id, date: dateStr })}
-                                style={{ background: 'none', border: `1px dashed ${COLORS.border}`, borderRadius: 6, color: COLORS.muted, fontSize: 11, cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', gap: 3 }}
-                              >
-                                <Plus size={10} /> Add
-                              </button>
-                            </div>
-                          </td>
+                          <div key={a.id} style={{ background: shift.color + '22', border: `1px solid ${shift.color}44`, borderRadius: 4, padding: '2px 6px', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            {a.is_supervisor && <span style={{ color: '#f59e0b', fontSize: 8 }}>★</span>}
+                            <span style={{ fontSize: 10, color: '#f1f5f9', fontWeight: a.is_supervisor ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                          </div>
                         );
                       })}
-                    </tr>
-                  ))}
-                  {shifts.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={{ padding: 32, textAlign: 'center', color: COLORS.muted }}>
-                        No shifts configured. Run the SQL migration to seed default shifts.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Driver: Own Schedule */}
-          {!isAdmin && (
-            <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20, marginBottom: 24 }}>
-              <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Your Schedule This Week</h3>
-              {assignments.length === 0 ? (
-                <p style={{ color: COLORS.muted }}>No shifts scheduled for this week.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {assignments.map(a => (
-                    <div key={a.id} style={{ background: '#22263a', border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 12, height: 12, borderRadius: '50%', background: a.shifts?.color || '#3b82f6', flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600 }}>{a.shifts?.name || 'Shift'}</div>
-                        <div style={{ color: COLORS.muted, fontSize: 13 }}>
-                          {new Date(a.work_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-                          {' · '}{a.shifts?.start_time}–{a.shifts?.end_time}
-                        </div>
-                      </div>
-                      {a.is_supervisor && <span style={{ color: '#f59e0b', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}><Star size={12} fill="#f59e0b" /> Supervisor</span>}
+                      {cellA.length === 0 && <div style={{ fontSize: 9, color: '#4b5563', textAlign: 'center', marginTop: 6 }}>+ Add</div>}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Cell detail panel */}
+          {activeCell && (
+            <div style={{ background: '#1a1d27', border: '1px solid #47a14166', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9', marginBottom: 14 }}>
+                {shifts.find((s) => s.id === activeCell.shiftId)?.name} — {fmtDate(activeCell.date)}
+              </div>
+              {getCellAssignments(activeCell.shiftId, activeCell.date).map((a) => {
+                const emp = a.employees || {};
+                const name = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+                return (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {a.is_supervisor && <span style={{ background: '#f59e0b22', color: '#f59e0b', fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>SUPERVISOR</span>}
+                      <span style={{ fontSize: 13, color: '#f1f5f9' }}>{name}</span>
+                    </div>
+                    <button onClick={() => handleRemove(a.id)} disabled={removing === a.id} style={{ background: '#3f1515', border: '1px solid #ef444444', borderRadius: 5, padding: '3px 10px', color: '#ef4444', fontSize: 11, cursor: 'pointer' }}>
+                      {removing === a.id ? '...' : 'Remove'}
+                    </button>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <select value={addEmpId} onChange={(e) => setAddEmpId(e.target.value)} style={{ ...inpStyle, flex: 1, minWidth: 160 }}>
+                  <option value="">Select employee...</option>
+                  {employees.map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
+                </select>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={addIsSupervisor} onChange={(e) => setAddIsSupervisor(e.target.checked)} style={{ accentColor: '#f59e0b' }} />
+                  Supervisor
+                </label>
+                <button onClick={handleAdd} disabled={!addEmpId || adding} style={{ background: addEmpId ? '#47a141' : '#22263a', border: 'none', borderRadius: 7, padding: '7px 16px', color: addEmpId ? '#fff' : '#8892a4', fontSize: 13, fontWeight: 700, cursor: addEmpId ? 'pointer' : 'not-allowed' }}>
+                  {adding ? 'Adding...' : 'Add to Shift'}
+                </button>
+                <button onClick={() => setActiveCell(null)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 12px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>Close</button>
+              </div>
             </div>
           )}
 
-          {/* Time Off Requests */}
-          <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: 16 }}>Time-Off Requests</h3>
-              {!isAdmin && (
-                <button onClick={() => setShowTimeOffForm(true)} style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={14} /> Request Time Off
-                </button>
-              )}
+          {/* Time-off requests */}
+          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+            <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9' }}>Time-Off Requests</span>
+              <span style={{ fontSize: 12, color: '#8892a4' }}>{timeOffList.filter((r) => r.status === 'pending').length} pending</span>
             </div>
-            {timeOffRequests.length === 0 ? (
-              <p style={{ color: COLORS.muted, margin: 0 }}>No time-off requests.</p>
+            {timeOffList.length === 0 ? (
+              <div style={{ padding: '30px', textAlign: 'center', color: '#8892a4', fontSize: 13 }}>No time-off requests.</div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
-                  <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                    {(isAdmin ? ['Employee', 'Dates', 'Reason', 'Status', 'Actions'] : ['Dates', 'Reason', 'Status']).map(h => (
-                      <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                  <tr style={{ borderBottom: '1px solid #2e3347' }}>
+                    {['Employee', 'Dates', 'Reason', 'Status', 'Actions'].map((h) => (
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#8892a4', fontWeight: 600, fontSize: 12 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {timeOffRequests.map(req => (
-                    <tr key={req.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
-                      {isAdmin && <td style={{ padding: '10px 12px', fontSize: 14 }}>{req.employees ? `${req.employees.first_name} ${req.employees.last_name}` : '—'}</td>}
-                      <td style={{ padding: '10px 12px', fontSize: 14 }}>{req.start_date} – {req.end_date}</td>
-                      <td style={{ padding: '10px 12px', fontSize: 14, color: COLORS.muted }}>{req.reason || '—'}</td>
-                      <td style={{ padding: '10px 12px' }}><StatusBadge status={req.status} /></td>
-                      {isAdmin && req.status === 'pending' && (
-                        <td style={{ padding: '10px 12px' }}>
+                  {timeOffList.map((r) => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #2e334722' }}>
+                      <td style={{ padding: '10px 16px', color: '#f1f5f9', fontWeight: 600 }}>
+                        {r.employees ? `${r.employees.first_name} ${r.employees.last_name}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: '#8892a4' }}>
+                        {fmtDate(r.start_date)}{r.start_date !== r.end_date ? ` – ${fmtDate(r.end_date)}` : ''}
+                      </td>
+                      <td style={{ padding: '10px 16px', color: '#8892a4' }}>{r.reason || '—'}</td>
+                      <td style={{ padding: '10px 16px' }}><StatusBadge status={r.status} /></td>
+                      <td style={{ padding: '10px 16px' }}>
+                        {r.status === 'pending' && (
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <button onClick={() => handleReviewTimeOff(req.id, 'approved')} style={{ background: '#47a14122', color: '#47a141', border: '1px solid #47a14144', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <CheckCircle size={12} /> Approve
-                            </button>
-                            <button onClick={() => handleReviewTimeOff(req.id, 'denied')} style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444444', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <XCircle size={12} /> Deny
-                            </button>
+                            <button onClick={() => handleReviewTimeOff(r.id, 'approved')} style={{ background: '#1a2e1a', border: '1px solid #47a14166', borderRadius: 5, padding: '4px 10px', color: '#47a141', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Approve</button>
+                            <button onClick={() => handleReviewTimeOff(r.id, 'denied')} style={{ background: '#3f1515', border: '1px solid #ef444444', borderRadius: 5, padding: '4px 10px', color: '#ef4444', fontSize: 11, cursor: 'pointer' }}>Deny</button>
                           </div>
-                        </td>
-                      )}
-                      {isAdmin && req.status !== 'pending' && (
-                        <td style={{ padding: '10px 12px', color: COLORS.muted, fontSize: 13 }}>{req.reviewed_at ? new Date(req.reviewed_at).toLocaleDateString() : '—'}</td>
-                      )}
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* Settings */}
+          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 14, overflow: 'hidden' }}>
+            <button onClick={() => setShowSettings((s) => !s)} style={{ width: '100%', background: '#22263a', border: 'none', borderBottom: showSettings ? '1px solid #2e3347' : 'none', padding: '14px 20px', color: '#f1f5f9', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between' }}>
+              Schedule Settings
+              <span style={{ color: '#8892a4', fontSize: 12 }}>{showSettings ? '▲' : '▼'}</span>
+            </button>
+            {showSettings && (
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 6 }}>Min notice for time-off requests (days)</label>
+                    <input type="number" style={{ ...inpStyle, width: '100%', boxSizing: 'border-box' }} value={settings.time_off_min_notice_days} onChange={(e) => setSettings((s) => ({ ...s, time_off_min_notice_days: parseInt(e.target.value) || 14 }))} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 6 }}>Auto-notify day of week</label>
+                    <select style={{ ...inpStyle, width: '100%', boxSizing: 'border-box' }} value={settings.auto_notify_day || 'sunday'} onChange={(e) => setSettings((s) => ({ ...s, auto_notify_day: e.target.value }))}>
+                      {['sunday', 'monday', 'saturday'].map((d) => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'auto_notify_enabled', label: 'Auto-send schedule weekly' },
+                    { key: 'notify_via_sms', label: 'Notify via SMS' },
+                    { key: 'notify_via_email', label: 'Notify via Email' },
+                  ].map(({ key, label }) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!settings[key]} onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.checked }))} style={{ accentColor: '#47a141', width: 14, height: 14 }} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <button onClick={handleSaveSettings} disabled={savingSettings} style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '8px 20px', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                    {savingSettings ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
+    </div>
+  );
+}
 
-      {/* Add Assignment Modal */}
-      {showAddCell && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 28, width: 360 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>Add to {shifts.find(s => s.id === showAddCell.shiftId)?.name}</h3>
-              <button onClick={() => setShowAddCell(null)} style={{ background: 'none', border: 'none', color: COLORS.muted, cursor: 'pointer' }}><X size={18} /></button>
+// ── Driver view ───────────────────────────────────────────────────────────────
+
+function DriverSchedule({ email, testMode }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [assignments, setAssignments] = useState([]);
+  const [shifts, setShifts] = useState(FALLBACK_SHIFTS);
+  const [myTimeOff, setMyTimeOff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ start_date: '', end_date: '', reason: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [myEmpId, setMyEmpId] = useState(null);
+
+  const monday = getMondayStr(weekOffset);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      if (testMode) {
+        const demo = buildDemoAssignments(monday);
+        setAssignments(demo.filter((a) => a.employee_id === 'de1'));
+        setShifts(FALLBACK_SHIFTS);
+        setMyTimeOff(DEMO_TIME_OFF.slice(0, 1));
+        setLoading(false);
+        return;
+      }
+      try {
+        const [sched, shiftsData, empData] = await Promise.all([
+          api.getMySchedule(email, monday),
+          api.getShifts(),
+          api.getEmployees({ search: email }),
+        ]);
+        setAssignments(sched.assignments || []);
+        setShifts(Array.isArray(shiftsData) && shiftsData.length ? shiftsData : FALLBACK_SHIFTS);
+        const emp = (Array.isArray(empData) ? empData : []).find((e) => e.email === email);
+        if (emp) {
+          setMyEmpId(emp.id);
+          const tor = await api.getTimeOffRequests(emp.id);
+          setMyTimeOff(Array.isArray(tor) ? tor : []);
+        }
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    }
+    load();
+  }, [email, monday, testMode]);
+
+  async function handleSubmit() {
+    if (!form.start_date || !form.end_date) { alert('Please select dates.'); return; }
+    if (testMode) { setShowForm(false); setToast('Demo mode — not saved'); setTimeout(() => setToast(null), 3000); return; }
+    if (!myEmpId) { alert('Your employee record was not found. Contact your admin.'); return; }
+    setSubmitting(true);
+    try {
+      await api.createTimeOffRequest({ employee_id: myEmpId, ...form });
+      setShowForm(false);
+      setForm({ start_date: '', end_date: '', reason: '' });
+      setToast('Time-off request submitted');
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) { alert('Failed: ' + err.message); }
+    finally { setSubmitting(false); }
+  }
+
+  const inpStyle = { background: '#0f1117', border: '1px solid #2e3347', borderRadius: 7, padding: '8px 11px', color: '#f1f5f9', fontSize: 13, width: '100%', boxSizing: 'border-box', outline: 'none' };
+
+  return (
+    <div>
+      {toast && <div style={{ position: 'fixed', top: 20, right: 24, background: '#47a141', color: '#fff', padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999 }}>{toast}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => setWeekOffset((o) => o - 1)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>← Prev</button>
+          <span style={{ fontWeight: 700, color: '#f1f5f9' }}>Week of {fmtWeekRange(monday)}</span>
+          <button onClick={() => setWeekOffset((o) => o + 1)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>Next →</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => alert('Schedule emailed to ' + email)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>Email My Schedule</button>
+          <button onClick={() => setShowForm(true)} style={{ background: '#1a2e1a', border: '1px solid #47a14166', borderRadius: 7, padding: '7px 14px', color: '#47a141', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Request Time Off</button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: '#8892a4' }}>Loading your schedule...</div>
+      ) : assignments.length === 0 ? (
+        <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: '40px', textAlign: 'center', color: '#8892a4', marginBottom: 20 }}>
+          No shifts scheduled for this week.
+        </div>
+      ) : (
+        <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #2e3347' }}>
+                {['Day', 'Date', 'Shift', 'Hours', 'Role'].map((h) => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#8892a4', fontWeight: 600, fontSize: 12 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...assignments].sort((a, b) => a.work_date.localeCompare(b.work_date)).map((a) => {
+                const shift = (a.shifts) || shifts.find((s) => s.id === a.shift_id) || {};
+                const dayName = new Date(a.work_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+                return (
+                  <tr key={a.id} style={{ borderBottom: '1px solid #2e334722' }}>
+                    <td style={{ padding: '12px 16px', color: '#f1f5f9', fontWeight: 600 }}>{dayName}</td>
+                    <td style={{ padding: '12px 16px', color: '#8892a4' }}>{fmtDate(a.work_date)}</td>
+                    <td style={{ padding: '12px 16px' }}><span style={{ color: shift.color || '#47a141', fontWeight: 600 }}>{shift.name || '—'}</span></td>
+                    <td style={{ padding: '12px 16px', color: '#8892a4', fontFamily: 'monospace', fontSize: 12 }}>{shift.start_time}–{shift.end_time}</td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {a.is_supervisor
+                        ? <span style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b44', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>Supervisor</span>
+                        : <span style={{ color: '#6b7280', fontSize: 12 }}>Driver</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Time-off form */}
+      {showForm && (
+        <div style={{ background: '#1a1d27', border: '1px solid #47a14166', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9', marginBottom: 16 }}>Request Time Off</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 4 }}>Start Date</label>
+              <input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))} style={inpStyle} />
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Employee</label>
-              <select value={addEmpId} onChange={e => setAddEmpId(e.target.value)} style={{ background: '#0f1117', border: '1px solid #2e3347', borderRadius: 8, color: '#f1f5f9', padding: '8px 12px', fontSize: 14, width: '100%' }}>
-                <option value="">Select employee...</option>
-                {employees.map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-              </select>
+            <div>
+              <label style={{ fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 4 }}>End Date</label>
+              <input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))} style={inpStyle} />
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer', fontSize: 14 }}>
-              <input type="checkbox" checked={addSupervisor} onChange={e => setAddSupervisor(e.target.checked)} />
-              <Star size={14} color="#f59e0b" /> Supervisor
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleAddAssignment} disabled={saving || !addEmpId} style={{ ...btnPrimary, flex: 1 }}>{saving ? 'Adding...' : 'Add'}</button>
-              <button onClick={() => setShowAddCell(null)} style={{ background: '#22263a', color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '8px 16px', fontSize: 14, cursor: 'pointer' }}>Cancel</button>
-            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 4 }}>Reason (optional)</label>
+            <input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Vacation, personal, medical..." style={inpStyle} />
+          </div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 14 }}>Minimum 14 days advance notice required.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleSubmit} disabled={submitting} style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '8px 20px', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              {submitting ? 'Submitting...' : 'Submit Request'}
+            </button>
+            <button onClick={() => setShowForm(false)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '8px 16px', color: '#8892a4', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}
 
-      {/* Time Off Request Form (driver) */}
-      {showTimeOffForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 28, width: 380 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>Request Time Off</h3>
-              <button onClick={() => setShowTimeOffForm(false)} style={{ background: 'none', border: 'none', color: COLORS.muted, cursor: 'pointer' }}><X size={18} /></button>
-            </div>
-            {[['start_date', 'Start Date', 'date'], ['end_date', 'End Date', 'date'], ['reason', 'Reason', 'text']].map(([key, label, type]) => (
-              <div key={key} style={{ marginBottom: 14 }}>
-                <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>{label}</label>
-                <input type={type} value={timeOffForm[key]} onChange={e => setTimeOffForm(f => ({ ...f, [key]: e.target.value }))}
-                  style={{ background: '#0f1117', border: '1px solid #2e3347', borderRadius: 8, color: '#f1f5f9', padding: '8px 12px', fontSize: 14, width: '100%', boxSizing: 'border-box' }} />
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleSubmitTimeOff} disabled={saving || !timeOffForm.start_date || !timeOffForm.end_date} style={{ ...btnPrimary, flex: 1 }}>{saving ? 'Submitting...' : 'Submit Request'}</button>
-              <button onClick={() => setShowTimeOffForm(false)} style={{ background: '#22263a', color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: '8px 16px', fontSize: 14, cursor: 'pointer' }}>Cancel</button>
-            </div>
-          </div>
+      {/* My requests */}
+      {myTimeOff.length > 0 && (
+        <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px', fontWeight: 700, fontSize: 14, color: '#f1f5f9' }}>My Time-Off Requests</div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #2e3347' }}>
+                {['Dates', 'Reason', 'Status'].map((h) => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#8892a4', fontWeight: 600, fontSize: 12 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {myTimeOff.map((r) => (
+                <tr key={r.id} style={{ borderBottom: '1px solid #2e334722' }}>
+                  <td style={{ padding: '10px 16px', color: '#f1f5f9' }}>{fmtDate(r.start_date)}{r.start_date !== r.end_date ? ` – ${fmtDate(r.end_date)}` : ''}</td>
+                  <td style={{ padding: '10px 16px', color: '#8892a4' }}>{r.reason || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}><StatusBadge status={r.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+export default function Schedules() {
+  const profile = useProfile();
+  const isDriver = profile?.role === 'driver';
+  const [testMode, setTestMode] = useState(false);
+
+  return (
+    <div style={{ padding: '32px 36px', maxWidth: 1200 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>{isDriver ? 'My Schedule' : 'Schedules'}</h1>
+          <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>
+            {isDriver ? 'View your shifts and request time off' : 'Manage weekly shifts, assign employees, and handle time-off requests'}
+          </div>
+        </div>
+        <button
+          onClick={() => setTestMode((m) => !m)}
+          style={{ background: testMode ? '#2a1f00' : '#22263a', border: `1px solid ${testMode ? '#f59e0b' : '#2e3347'}`, borderRadius: 7, padding: '7px 14px', color: testMode ? '#f59e0b' : '#8892a4', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: testMode ? '#f59e0b' : '#4b5563', display: 'inline-block' }} />
+          {testMode ? 'Test Mode ON' : 'Test Mode'}
+        </button>
+      </div>
+
+      {testMode && (
+        <div style={{ background: '#2a1f00', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ background: '#f59e0b', color: '#000', fontWeight: 800, fontSize: 10, padding: '2px 7px', borderRadius: 4, textTransform: 'uppercase', flexShrink: 0 }}>Test Mode</span>
+          <span style={{ fontSize: 12, color: '#fbbf24' }}>Showing demo schedule with 5 employees. Changes are not saved.</span>
+        </div>
+      )}
+
+      {isDriver
+        ? <DriverSchedule email={profile?.email || ''} testMode={testMode} />
+        : <AdminSchedule testMode={testMode} />
+      }
     </div>
   );
 }
