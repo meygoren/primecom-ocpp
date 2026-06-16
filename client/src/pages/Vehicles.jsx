@@ -1,6 +1,17 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
+
+// Built-in car templates (make → { model, image_url })
+const CAR_TEMPLATES = [
+  { make: 'Tesla', model: 'Model Y', image_url: 'https://autoimage.capitalone.com/stock-media/evox/2023-Tesla-Model_Y-Long_Range-PBSB-52157_cc2400_032_PBSB.png' },
+  { make: 'Tesla', model: 'Model 3', image_url: '' },
+  { make: 'Tesla', model: 'Model X', image_url: '' },
+  { make: 'Tesla', model: 'Model S', image_url: '' },
+  { make: 'Rivian', model: 'R1T', image_url: '' },
+  { make: 'Ford', model: 'F-150 Lightning', image_url: '' },
+];
 
 // ── Test data ─────────────────────────────────────────────────────────────────
 
@@ -79,6 +90,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${time}`;
+}
+
 function fmtDuration(start, stop) {
   if (!start || !stop) return '—';
   const mins = Math.round((new Date(stop) - new Date(start)) / 60000);
@@ -102,6 +121,7 @@ function VehicleEditForm({ initial, onSave, onCancel, saving }) {
     model: initial?.model || '',
     year: initial?.year || '',
     notes: initial?.notes || '',
+    image_url: initial?.image_url || '',
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -109,8 +129,29 @@ function VehicleEditForm({ initial, onSave, onCancel, saving }) {
   const inp = { background: '#0f1117', border: '1px solid #2e3347', borderRadius: 7, padding: '8px 11px', color: '#f1f5f9', fontSize: 13, width: '100%', boxSizing: 'border-box', outline: 'none' };
   const lbl = { fontSize: 11, color: '#8892a4', display: 'block', marginBottom: 4 };
 
+  function applyTemplate(tpl) {
+    setForm((f) => ({ ...f, make: tpl.make, model: tpl.model, image_url: tpl.image_url }));
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Car templates */}
+      <div>
+        <div style={{ fontSize: 11, color: '#8892a4', marginBottom: 6 }}>Quick-fill from template</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {CAR_TEMPLATES.map((tpl) => (
+            <button
+              key={`${tpl.make}-${tpl.model}`}
+              type="button"
+              onClick={() => applyTemplate(tpl)}
+              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '4px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer' }}
+            >
+              {tpl.make} {tpl.model}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <label style={lbl}>MAC Address *</label>
@@ -138,6 +179,15 @@ function VehicleEditForm({ initial, onSave, onCancel, saving }) {
         </div>
       </div>
       <div>
+        <label style={lbl}>Vehicle Image URL</label>
+        <input style={inp} value={form.image_url} onChange={(e) => set('image_url', e.target.value)} placeholder="https://..." />
+        {form.image_url && (
+          <div style={{ marginTop: 6, borderRadius: 6, overflow: 'hidden', background: '#0f1117', maxHeight: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img src={form.image_url} alt="preview" style={{ maxHeight: 80, maxWidth: '100%', objectFit: 'contain', opacity: 0.85 }} onError={(e) => { e.target.style.display = 'none'; }} />
+          </div>
+        )}
+      </div>
+      <div>
         <label style={lbl}>Notes</label>
         <input style={inp} value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Optional notes" />
       </div>
@@ -160,6 +210,7 @@ function VehicleEditForm({ initial, onSave, onCancel, saving }) {
 // ── VehicleDetail ─────────────────────────────────────────────────────────────
 
 function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
+  const navigate = useNavigate();
   const [sessions, setSessions] = useState(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -232,8 +283,8 @@ function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
           </>
         ) : (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-              <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, gap: 20 }}>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 26, fontWeight: 800, color: '#f1f5f9', letterSpacing: '.02em' }}>
                   {vehicle.license_plate || <span style={{ color: '#4b5563' }}>No plate</span>}
                 </div>
@@ -242,19 +293,36 @@ function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
                     {vehicle.year} {vehicle.make} {vehicle.model}
                   </div>
                 )}
-              </div>
-              {canEdit && !isDemo && (
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setEditing(true)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>
-                    Edit
-                  </button>
-                  {vehicle.id && (
-                    <button onClick={handleDelete} disabled={deleting} style={{ background: '#3f1515', border: '1px solid #ef4444', borderRadius: 7, padding: '7px 14px', color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>
-                      {deleting ? '...' : 'Remove'}
+                {canEdit && !isDemo && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button onClick={() => setEditing(true)} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '7px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer' }}>
+                      Edit
                     </button>
-                  )}
-                </div>
-              )}
+                    {vehicle.id && (
+                      <button onClick={handleDelete} disabled={deleting} style={{ background: '#3f1515', border: '1px solid #ef4444', borderRadius: 7, padding: '7px 14px', color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>
+                        {deleting ? '...' : 'Remove'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Vehicle image */}
+              {(() => {
+                const imgUrl = vehicle.image_url ||
+                  (vehicle.make === 'Tesla' && vehicle.model?.startsWith('Model Y')
+                    ? 'https://autoimage.capitalone.com/stock-media/evox/2023-Tesla-Model_Y-Long_Range-PBSB-52157_cc2400_032_PBSB.png'
+                    : null);
+                return imgUrl ? (
+                  <div style={{ flexShrink: 0, width: 220, height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <img
+                      src={imgUrl}
+                      alt={`${vehicle.make} ${vehicle.model}`}
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', opacity: 0.9, filter: 'drop-shadow(0 2px 12px #00000088)' }}
+                      onError={(e) => { e.target.parentNode.style.display = 'none'; }}
+                    />
+                  </div>
+                ) : null;
+              })()}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
@@ -296,7 +364,7 @@ function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #2e3347' }}>
-                {['Date', 'Charger', 'Duration', 'kWh', 'Stop Reason'].map((h) => (
+                {['Date & Time', 'Charger', 'Location', 'Duration', 'kWh', 'Stop Reason', ''].map((h) => (
                   <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#8892a4', fontWeight: 600, fontSize: 12 }}>{h}</th>
                 ))}
               </tr>
@@ -304,13 +372,24 @@ function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
             <tbody>
               {sessions.map((s, i) => (
                 <tr key={s.id || i} style={{ borderBottom: '1px solid #2e334722' }}>
-                  <td style={{ padding: '10px 16px', color: '#f1f5f9' }}>{fmtDate(s.start_time)}</td>
+                  <td style={{ padding: '10px 16px', color: '#f1f5f9', whiteSpace: 'nowrap' }}>{fmtDateTime(s.start_time)}</td>
                   <td style={{ padding: '10px 16px', color: '#8892a4', fontFamily: 'monospace', fontSize: 12 }}>{s.charger_id}</td>
+                  <td style={{ padding: '10px 16px', color: '#8892a4', fontSize: 12 }}>{s.location_label || <span style={{ color: '#4b5563' }}>—</span>}</td>
                   <td style={{ padding: '10px 16px', color: '#8892a4' }}>{fmtDuration(s.start_time, s.stop_time)}</td>
                   <td style={{ padding: '10px 16px', color: s.energy_kwh ? '#47a141' : '#4b5563', fontWeight: 600 }}>
                     {s.energy_kwh != null ? `${parseFloat(s.energy_kwh).toFixed(1)} kWh` : '—'}
                   </td>
                   <td style={{ padding: '10px 16px', color: '#6b7280', fontSize: 12 }}>{s.stop_reason || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    {s.charger_id && !isDemo && (
+                      <button
+                        onClick={() => navigate(`/logs?charger_id=${encodeURIComponent(s.charger_id)}`)}
+                        style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '4px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        View Logs
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

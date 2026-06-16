@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/time';
 
 export default function Logs() {
+  const location = useLocation();
+  const initialChargerId = new URLSearchParams(location.search).get('charger_id') || '';
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [chargerId, setChargerId] = useState('');
+  const [chargerId, setChargerId] = useState(initialChargerId);
   const [expanded, setExpanded] = useState(null);
 
   async function load() {

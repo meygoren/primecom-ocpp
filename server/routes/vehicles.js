@@ -91,6 +91,19 @@ router.get('/export', async (req, res) => {
   res.send(csv);
 });
 
+// Helper: enrich sessions with location_label from chargers table
+async function enrichWithLocation(sessions) {
+  const chargerIds = [...new Set((sessions || []).map((s) => s.charger_id).filter(Boolean))];
+  if (chargerIds.length === 0) return sessions || [];
+  const { data: chargers } = await supabase
+    .from('chargers')
+    .select('charger_id, location_label')
+    .in('charger_id', chargerIds);
+  const locMap = {};
+  for (const c of (chargers || [])) locMap[c.charger_id] = c.location_label || null;
+  return (sessions || []).map((s) => ({ ...s, location_label: locMap[s.charger_id] || null }));
+}
+
 // GET /api/vehicles/:id/sessions — all sessions for a vehicle profile
 router.get('/:id/sessions', async (req, res) => {
   const { data: profile, error: pe } = await supabase
@@ -109,7 +122,8 @@ router.get('/:id/sessions', async (req, res) => {
     .limit(500);
 
   if (se) return res.status(500).json({ error: se.message });
-  res.json({ profile, sessions: sessions || [] });
+  const enriched = await enrichWithLocation(sessions);
+  res.json({ profile, sessions: enriched });
 });
 
 // GET /api/vehicles/mac/:mac/sessions — sessions by raw MAC (for unregistered)
@@ -123,7 +137,8 @@ router.get('/mac/:mac/sessions', async (req, res) => {
     .limit(500);
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ sessions: sessions || [] });
+  const enriched = await enrichWithLocation(sessions);
+  res.json({ sessions: enriched });
 });
 
 // POST /api/vehicles — create a vehicle profile
