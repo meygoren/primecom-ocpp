@@ -32,26 +32,39 @@ async function getLiveData(ocppId) {
       .is('stop_time', null),
   ]);
 
-  const soc = socResult.data?.[0]?.value ?? null;
+  const last_soc = socResult.data?.[0]?.value ?? null;
+  const last_soc_time = socResult.data?.[0]?.timestamp ?? null;
   const charger = chargerResult.data || null;
   const activeSessions = sessionsResult.data || [];
+  const is_active = activeSessions.length > 0;
+  const soc = is_active ? last_soc : null;
 
-  // Get power per active session (transaction-based for accuracy)
+  // Get power and energy per active session
   let power_kw = null;
+  let session_kwh_charged = null;
   const txIds = activeSessions.map((s) => s.transaction_id).filter(Boolean);
   if (txIds.length > 0) {
-    const { data: powerRows } = await supabase
-      .from('meter_values')
-      .select('value, unit, transaction_id')
-      .in('transaction_id', txIds)
-      .eq('charger_id', ocppId)
-      .eq('measurand', 'Power.Active.Import')
-      .order('timestamp', { ascending: false })
-      .limit(txIds.length * 2 + 5);
+    const [powerResult, energyResult] = await Promise.all([
+      supabase
+        .from('meter_values')
+        .select('value, unit, transaction_id')
+        .in('transaction_id', txIds)
+        .eq('charger_id', ocppId)
+        .eq('measurand', 'Power.Active.Import')
+        .order('timestamp', { ascending: false })
+        .limit(txIds.length * 2 + 5),
+      supabase
+        .from('meter_values')
+        .select('value, unit, timestamp')
+        .in('transaction_id', txIds)
+        .eq('charger_id', ocppId)
+        .eq('measurand', 'Energy.Active.Import.Register')
+        .order('timestamp', { ascending: true }),
+    ]);
 
     const seen = new Set();
     let total = 0;
-    for (const row of (powerRows || [])) {
+    for (const row of (powerResult.data || [])) {
       if (!seen.has(row.transaction_id)) {
         seen.add(row.transaction_id);
         const val = parseFloat(row.value);
@@ -59,6 +72,17 @@ async function getLiveData(ocppId) {
       }
     }
     if (seen.size > 0) power_kw = total;
+
+    const energyRows = energyResult.data || [];
+    if (energyRows.length >= 1) {
+      const toKwh = (row) => {
+        const v = parseFloat(row.value);
+        return row.unit === 'Wh' ? v / 1000 : v;
+      };
+      const first = energyRows[0];
+      const last = energyRows[energyRows.length - 1];
+      session_kwh_charged = Math.max(0, toKwh(last) - toKwh(first));
+    }
   }
 
   // Fall back to latest aggregate reading if no transaction-based data
@@ -107,6 +131,10 @@ async function getLiveData(ocppId) {
   return {
     ocpp_id: ocppId,
     soc,
+    last_soc,
+    last_soc_time,
+    is_active,
+    session_kwh_charged,
     power_kw,
     status: charger?.status || 'offline',
     last_heartbeat: charger?.last_heartbeat || null,
