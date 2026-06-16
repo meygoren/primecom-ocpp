@@ -974,8 +974,10 @@ function getDemoChargers(tick) {
     label,
     live: {
       status: 'charging',
+      is_active: true,
       power_kw: 308 + Math.sin(t + phase) * 8 + Math.cos(t * 1.6 + phase) * 4,
       soc: Math.min(98, Math.max(5, baseSoc + Math.sin(t * 0.12 + phase) * 4)),
+      session_kwh_charged: Math.max(0, 12 + Math.sin(t * 0.08 + phase) * 5),
       connectors: [
         { connector_id: 1, active: true },
         { connector_id: 2, active: true },
