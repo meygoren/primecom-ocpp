@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
-const { predictTimeToFull } = require('../services/socPredictor');
 
 // Helper: fetch live OCPP data for a given charger ID
 async function getLiveData(ocppId) {
@@ -39,32 +38,23 @@ async function getLiveData(ocppId) {
   const is_active = activeSessions.length > 0;
   const soc = is_active ? last_soc : null;
 
-  // Get power and energy per active session
+  // Get power per active session (transaction-based for accuracy)
   let power_kw = null;
   let session_kwh_charged = null;
   const txIds = activeSessions.map((s) => s.transaction_id).filter(Boolean);
   if (txIds.length > 0) {
-    const [powerResult, energyResult] = await Promise.all([
-      supabase
-        .from('meter_values')
-        .select('value, unit, transaction_id')
-        .in('transaction_id', txIds)
-        .eq('charger_id', ocppId)
-        .eq('measurand', 'Power.Active.Import')
-        .order('timestamp', { ascending: false })
-        .limit(txIds.length * 2 + 5),
-      supabase
-        .from('meter_values')
-        .select('value, unit, timestamp')
-        .in('transaction_id', txIds)
-        .eq('charger_id', ocppId)
-        .eq('measurand', 'Energy.Active.Import.Register')
-        .order('timestamp', { ascending: true }),
-    ]);
+    const { data: powerRows } = await supabase
+      .from('meter_values')
+      .select('value, unit, transaction_id')
+      .in('transaction_id', txIds)
+      .eq('charger_id', ocppId)
+      .eq('measurand', 'Power.Active.Import')
+      .order('timestamp', { ascending: false })
+      .limit(txIds.length * 2 + 5);
 
     const seen = new Set();
     let total = 0;
-    for (const row of (powerResult.data || [])) {
+    for (const row of (powerRows || [])) {
       if (!seen.has(row.transaction_id)) {
         seen.add(row.transaction_id);
         const val = parseFloat(row.value);
@@ -72,16 +62,39 @@ async function getLiveData(ocppId) {
       }
     }
     if (seen.size > 0) power_kw = total;
+  }
 
-    const energyRows = energyResult.data || [];
-    if (energyRows.length >= 1) {
+  // Energy charged this session — filter by timestamp >= session start_time.
+  // This is more reliable than filtering by transaction_id because some chargers
+  // send MeterValues without a transactionId, or the accumulated register carries
+  // values from prior sessions under the same transaction_id.
+  if (is_active && activeSessions.length > 0) {
+    const earliestStart = activeSessions
+      .map((s) => s.start_time)
+      .filter(Boolean)
+      .sort()[0];
+
+    if (earliestStart) {
+      const { data: energyRows } = await supabase
+        .from('meter_values')
+        .select('value, unit, timestamp')
+        .eq('charger_id', ocppId)
+        .eq('measurand', 'Energy.Active.Import.Register')
+        .gte('timestamp', earliestStart)
+        .order('timestamp', { ascending: true });
+
       const toKwh = (row) => {
         const v = parseFloat(row.value);
         return row.unit === 'Wh' ? v / 1000 : v;
       };
-      const first = energyRows[0];
-      const last = energyRows[energyRows.length - 1];
-      session_kwh_charged = Math.max(0, toKwh(last) - toKwh(first));
+
+      if (energyRows && energyRows.length >= 2) {
+        const delta = toKwh(energyRows[energyRows.length - 1]) - toKwh(energyRows[0]);
+        // Cap at pack capacity as sanity check
+        session_kwh_charged = Math.max(0, Math.min(450, delta));
+      } else if (energyRows && energyRows.length === 1) {
+        session_kwh_charged = 0; // session just started, no delta yet
+      }
     }
   }
 
@@ -117,16 +130,9 @@ async function getLiveData(ocppId) {
     },
   ];
 
-  // Predict time to 100% when actively charging with a known SOC
-  let eta = null;
-  const isCharging = charger?.status === 'charging' || activeSessions.length > 0;
-  if (isCharging && soc !== null && soc < 100) {
-    try {
-      eta = await predictTimeToFull(ocppId, parseFloat(soc), power_kw);
-    } catch (err) {
-      console.error(`[Predictor] Error for ${ocppId}:`, err.message);
-    }
-  }
+  // ETA is computed client-side using known 450 kWh pack capacity and live kW.
+  // The server predictor was removed because its historical-blended estimates
+  // produced wrong results when session data was sparse or the counter reset.
 
   return {
     ocpp_id: ocppId,
@@ -139,8 +145,6 @@ async function getLiveData(ocppId) {
     status: charger?.status || 'offline',
     last_heartbeat: charger?.last_heartbeat || null,
     connectors,
-    eta_minutes: eta?.minutes ?? null,
-    eta_confidence: eta?.confidence ?? null,
   };
 }
 
