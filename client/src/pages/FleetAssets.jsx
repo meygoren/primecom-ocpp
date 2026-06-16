@@ -13,20 +13,20 @@ const MAINTENANCE_TYPES = [
 ];
 
 const DEMO_VEHICLES = [
-  { id: 'demo-1', name: 'EMV-001', vehicle_type: 'electric', year: 2023, capacity_kwh: 200, current_soc_pct: 78, last_service_date: '2026-05-10', odometer_miles: 12400, status: 'active', notes: 'Primary Wilmington unit' },
-  { id: 'demo-2', name: 'EMV-002', vehicle_type: 'electric', year: 2023, capacity_kwh: 200, current_soc_pct: 45, last_service_date: '2026-04-22', odometer_miles: 14800, status: 'active', notes: '' },
-  { id: 'demo-3', name: 'EMV-003', vehicle_type: 'electric', year: 2022, capacity_kwh: 200, current_soc_pct: 92, last_service_date: '2026-05-30', odometer_miles: 22300, status: 'active', notes: '' },
-  { id: 'demo-4', name: 'EMV-004', vehicle_type: 'electric', year: 2022, capacity_kwh: 200, current_soc_pct: 0,  last_service_date: '2026-03-15', odometer_miles: 31200, status: 'in_service', notes: 'Battery module replacement' },
-  { id: 'demo-5', name: 'DSL-001', vehicle_type: 'diesel',   year: 2021, capacity_kwh: null, current_soc_pct: null, last_service_date: '2026-05-01', odometer_miles: 87400, status: 'active', notes: 'Backup unit' },
-  { id: 'demo-6', name: 'DSL-002', vehicle_type: 'diesel',   year: 2020, capacity_kwh: null, current_soc_pct: null, last_service_date: '2026-02-18', odometer_miles: 113200, status: 'active', notes: '' },
+  { id: 'demo-1', unit_id: 'EMV-001', type: 'emv',    year: 2023, capacity_kwh: 200, current_soc_pct: 78, last_service_date: '2026-05-10', odometer_miles: 12400,  status: 'active',     notes: 'Primary Wilmington unit' },
+  { id: 'demo-2', unit_id: 'EMV-002', type: 'emv',    year: 2023, capacity_kwh: 200, current_soc_pct: 45, last_service_date: '2026-04-22', odometer_miles: 14800,  status: 'active',     notes: '' },
+  { id: 'demo-3', unit_id: 'EMV-003', type: 'emv',    year: 2022, capacity_kwh: 200, current_soc_pct: 92, last_service_date: '2026-05-30', odometer_miles: 22300,  status: 'active',     notes: '' },
+  { id: 'demo-4', unit_id: 'EMV-004', type: 'emv',    year: 2022, capacity_kwh: 200, current_soc_pct: 0,  last_service_date: '2026-03-15', odometer_miles: 31200,  status: 'in_service', notes: 'Battery module replacement' },
+  { id: 'demo-5', unit_id: 'DSL-001', type: 'diesel', year: 2021, capacity_kwh: null, current_soc_pct: null, last_service_date: '2026-05-01', odometer_miles: 87400,  status: 'active',     notes: 'Backup unit' },
+  { id: 'demo-6', unit_id: 'DSL-002', type: 'diesel', year: 2020, capacity_kwh: null, current_soc_pct: null, last_service_date: '2026-02-18', odometer_miles: 113200, status: 'active',     notes: '' },
 ];
 
 const DEMO_MAINTENANCE = [
-  { id: 'dm-1', vehicle_id: 'demo-1', date: '2026-05-10', type: 'Inspection',   description: 'Annual DOT inspection — passed',        cost: 0,    performed_by: 'Primecom Tech',  next_service_date: '2027-05-10', fleet_vehicles: { name: 'EMV-001', vehicle_type: 'electric' } },
-  { id: 'dm-2', vehicle_id: 'demo-4', date: '2026-03-15', type: 'Repair',       description: 'Battery module fault — replacement ordered', cost: 8400, performed_by: 'International', next_service_date: null,         fleet_vehicles: { name: 'EMV-004', vehicle_type: 'electric' } },
-  { id: 'dm-3', vehicle_id: 'demo-5', date: '2026-05-01', type: 'Oil Change',   description: '15W-40 diesel, 10 qt',                  cost: 180,  performed_by: 'Jiffy Lube',     next_service_date: '2026-08-01', fleet_vehicles: { name: 'DSL-001', vehicle_type: 'diesel' } },
-  { id: 'dm-4', vehicle_id: 'demo-2', date: '2026-04-22', type: 'Tire Rotation',description: 'All 6 drive tires rotated',              cost: 120,  performed_by: 'Primecom Tech',  next_service_date: '2026-10-22', fleet_vehicles: { name: 'EMV-002', vehicle_type: 'electric' } },
-  { id: 'dm-5', vehicle_id: 'demo-6', date: '2026-02-18', type: 'Brake Service',description: 'Rear brake drums resurfaced',            cost: 640,  performed_by: 'Speedway Diesel',next_service_date: '2027-02-18', fleet_vehicles: { name: 'DSL-002', vehicle_type: 'diesel' } },
+  { id: 'dm-1', vehicle_id: 'demo-1', date: '2026-05-10', type: 'Inspection',    description: 'Annual DOT inspection — passed',           cost: 0,    performed_by: 'Primecom Tech',   next_service_date: '2027-05-10', fleet_vehicles: { unit_id: 'EMV-001', type: 'emv' } },
+  { id: 'dm-2', vehicle_id: 'demo-4', date: '2026-03-15', type: 'Repair',        description: 'Battery module fault — replacement ordered', cost: 8400, performed_by: 'International',  next_service_date: null,         fleet_vehicles: { unit_id: 'EMV-004', type: 'emv' } },
+  { id: 'dm-3', vehicle_id: 'demo-5', date: '2026-05-01', type: 'Oil Change',    description: '15W-40 diesel, 10 qt',                     cost: 180,  performed_by: 'Jiffy Lube',      next_service_date: '2026-08-01', fleet_vehicles: { unit_id: 'DSL-001', type: 'diesel' } },
+  { id: 'dm-4', vehicle_id: 'demo-2', date: '2026-04-22', type: 'Tire Rotation', description: 'All 6 drive tires rotated',                 cost: 120,  performed_by: 'Primecom Tech',   next_service_date: '2026-10-22', fleet_vehicles: { unit_id: 'EMV-002', type: 'emv' } },
+  { id: 'dm-5', vehicle_id: 'demo-6', date: '2026-02-18', type: 'Brake Service', description: 'Rear brake drums resurfaced',               cost: 640,  performed_by: 'Speedway Diesel', next_service_date: '2027-02-18', fleet_vehicles: { unit_id: 'DSL-002', type: 'diesel' } },
 ];
 
 function SocBar({ pct }) {
@@ -122,7 +122,7 @@ export default function FleetAssets() {
       };
       if (testMode) {
         const veh = vehicles.find((v) => v.id === payload.vehicle_id);
-        setMaintenance((prev) => [{ ...payload, id: 'demo-' + Date.now(), fleet_vehicles: { name: veh?.name, vehicle_type: veh?.vehicle_type } }, ...prev]);
+        setMaintenance((prev) => [{ ...payload, id: 'demo-' + Date.now(), fleet_vehicles: { unit_id: veh?.unit_id, type: veh?.type } }, ...prev]);
       } else {
         const rec = await api.createMaintenanceLog(payload);
         setMaintenance((prev) => [rec, ...prev]);
@@ -148,10 +148,10 @@ export default function FleetAssets() {
 
   const filtered = selectedVeh ? maintenance.filter((m) => m.vehicle_id === selectedVeh) : maintenance;
 
-  const activeCount   = vehicles.filter((v) => v.status === 'active').length;
+  const activeCount    = vehicles.filter((v) => v.status === 'active').length;
   const inServiceCount = vehicles.filter((v) => v.status === 'in_service').length;
-  const electricCount = vehicles.filter((v) => v.vehicle_type === 'electric').length;
-  const dieselCount   = vehicles.filter((v) => v.vehicle_type === 'diesel').length;
+  const electricCount  = vehicles.filter((v) => v.type === 'emv').length;
+  const dieselCount    = vehicles.filter((v) => v.type === 'diesel').length;
 
   return (
     <div style={{ padding: 32, background: '#0f1117', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
@@ -234,14 +234,14 @@ export default function FleetAssets() {
                 const isEditing = editVeh === v.id;
                 return (
                   <tr key={v.id} style={{ borderBottom: '1px solid #2e3347', background: isEditing ? '#22263a' : 'transparent' }}>
-                    <td style={{ padding: '14px 16px', fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>{v.name}</td>
+                    <td style={{ padding: '14px 16px', fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>{v.unit_id}</td>
                     <td style={{ padding: '14px 16px' }}>
                       <span style={{
                         fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 5,
-                        background: v.vehicle_type === 'electric' ? '#1a3a4a' : '#2a2010',
-                        color: v.vehicle_type === 'electric' ? '#3b82f6' : '#f59e0b',
+                        background: v.type === 'emv' ? '#1a3a4a' : '#2a2010',
+                        color: v.type === 'emv' ? '#3b82f6' : '#f59e0b',
                       }}>
-                        {v.vehicle_type === 'electric' ? 'Electric' : 'Diesel'}
+                        {v.type === 'emv' ? 'Electric' : 'Diesel'}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px', fontSize: 13, color: '#8892a4' }}>{v.year || '—'}</td>
@@ -256,14 +256,14 @@ export default function FleetAssets() {
                       )}
                     </td>
                     <td style={{ padding: '14px 16px', minWidth: 140 }}>
-                      {isEditing ? (
+                      {v.type !== 'diesel' && (isEditing ? (
                         <input type="number" min="0" max="100" value={editForm.current_soc_pct}
                           onChange={(e) => setEditForm((f) => ({ ...f, current_soc_pct: e.target.value }))}
                           placeholder="SoC %"
                           style={{ background: '#0f1117', border: '1px solid #2e3347', borderRadius: 6, color: '#f1f5f9', fontSize: 12, padding: '4px 8px', width: 70 }} />
                       ) : (
                         <SocBar pct={v.current_soc_pct} />
-                      )}
+                      ))}
                     </td>
                     <td style={{ padding: '14px 16px', fontSize: 13, color: '#8892a4' }}>
                       {isEditing ? (
@@ -349,7 +349,7 @@ export default function FleetAssets() {
                   <select value={maintForm.vehicle_id} onChange={(e) => setMaintForm((f) => ({ ...f, vehicle_id: e.target.value }))}
                     style={{ width: '100%', marginTop: 4, background: '#0f1117', border: '1px solid #2e3347', borderRadius: 8, color: '#f1f5f9', fontSize: 13, padding: '8px 10px' }}>
                     <option value="">Select vehicle</option>
-                    {vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    {vehicles.map((v) => <option key={v.id} value={v.id}>{v.unit_id}</option>)}
                   </select>
                 </div>
                 <div>
@@ -415,7 +415,7 @@ export default function FleetAssets() {
                 {filtered.map((m) => (
                   <tr key={m.id} style={{ borderBottom: '1px solid #2e3347' }}>
                     <td style={{ padding: '12px 16px', fontSize: 13, color: '#8892a4' }}>{m.date}</td>
-                    <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{m.fleet_vehicles?.name}</td>
+                    <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{m.fleet_vehicles?.unit_id}</td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', background: '#1a2a3a', padding: '3px 8px', borderRadius: 5 }}>{m.type}</span>
                     </td>

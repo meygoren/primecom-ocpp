@@ -64,7 +64,7 @@ router.get('/:id', async (req, res) => {
 // PATCH /api/chargers/:id — update label or notes
 router.patch('/:id', async (req, res) => {
   const { id } = req.params;
-  const { location_label, notes, connector_count, rated_kw, auto_start_enabled, auto_start_id_tag, show_on_dashboard } = req.body;
+  const { location_label, notes, connector_count, rated_kw, auto_start_enabled, auto_start_id_tag, show_on_dashboard, auto_transfer_vin_enabled } = req.body;
 
   const updates = {};
   if (location_label !== undefined) updates.location_label = location_label;
@@ -74,6 +74,7 @@ router.patch('/:id', async (req, res) => {
   if (auto_start_enabled !== undefined) updates.auto_start_enabled = auto_start_enabled;
   if (auto_start_id_tag !== undefined) updates.auto_start_id_tag = auto_start_id_tag || null;
   if (show_on_dashboard !== undefined) updates.show_on_dashboard = show_on_dashboard;
+  if (auto_transfer_vin_enabled !== undefined) updates.auto_transfer_vin_enabled = auto_transfer_vin_enabled;
 
   const { data, error } = await supabase
     .from('chargers')

@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
   const { status, severity, vehicle_id } = req.query;
   let q = supabase
     .from('incident_reports')
-    .select('*, fleet_vehicles(name)')
+    .select('*, fleet_vehicles(unit_id)')
     .order('date', { ascending: false });
   if (status)     q = q.eq('status', status);
   if (severity)   q = q.eq('severity', severity);

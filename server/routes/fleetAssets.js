@@ -19,7 +19,7 @@ async function getRole(user) {
 router.get('/vehicles', async (req, res) => {
   const user = await getUser(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  const { data, error } = await supabase.from('fleet_vehicles').select('*').order('name');
+  const { data, error } = await supabase.from('fleet_vehicles').select('*').order('unit_id');
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -41,7 +41,7 @@ router.get('/maintenance', async (req, res) => {
   const { vehicle_id } = req.query;
   let q = supabase
     .from('maintenance_logs')
-    .select('*, fleet_vehicles(name, vehicle_type)')
+    .select('*, fleet_vehicles(unit_id, type)')
     .order('date', { ascending: false });
   if (vehicle_id) q = q.eq('vehicle_id', vehicle_id);
   const { data, error } = await q;

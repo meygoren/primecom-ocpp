@@ -21,9 +21,9 @@ const STATUS_STYLE = {
 };
 
 const DEMO_VEHICLES = [
-  { id: 'demo-1', name: 'EMV-001' }, { id: 'demo-2', name: 'EMV-002' },
-  { id: 'demo-3', name: 'EMV-003' }, { id: 'demo-4', name: 'EMV-004' },
-  { id: 'demo-5', name: 'DSL-001' }, { id: 'demo-6', name: 'DSL-002' },
+  { id: 'demo-1', unit_id: 'EMV-001' }, { id: 'demo-2', unit_id: 'EMV-002' },
+  { id: 'demo-3', unit_id: 'EMV-003' }, { id: 'demo-4', unit_id: 'EMV-004' },
+  { id: 'demo-5', unit_id: 'DSL-001' }, { id: 'demo-6', unit_id: 'DSL-002' },
 ];
 
 const DEMO_INCIDENTS = [
@@ -31,7 +31,7 @@ const DEMO_INCIDENTS = [
     id: 'di-1',
     date: '2026-06-10',
     time: '14:23',
-    fleet_vehicles: { name: 'EMV-002' },
+    fleet_vehicles: { unit_id: 'EMV-002' },
     vehicle_id: 'demo-2',
     driver_name: 'Carlos Mendez',
     incident_type: 'Near Miss',
@@ -50,7 +50,7 @@ const DEMO_INCIDENTS = [
     id: 'di-2',
     date: '2026-05-28',
     time: '09:45',
-    fleet_vehicles: { name: 'EMV-004' },
+    fleet_vehicles: { unit_id: 'EMV-004' },
     vehicle_id: 'demo-4',
     driver_name: 'Marcus Johnson',
     incident_type: 'Equipment Failure',
@@ -69,7 +69,7 @@ const DEMO_INCIDENTS = [
     id: 'di-3',
     date: '2026-04-15',
     time: '07:10',
-    fleet_vehicles: { name: 'DSL-001' },
+    fleet_vehicles: { unit_id: 'DSL-001' },
     vehicle_id: 'demo-5',
     driver_name: 'Darnell Brooks',
     incident_type: 'Property Damage',
@@ -151,7 +151,7 @@ export default function Incidents() {
       const payload = { ...form, vehicle_id: form.vehicle_id || null };
       if (testMode) {
         const veh = vehicles.find((v) => v.id === payload.vehicle_id);
-        setIncidents((prev) => [{ ...payload, id: 'di-' + Date.now(), fleet_vehicles: veh ? { name: veh.name } : null, status: 'open', created_at: new Date().toISOString() }, ...prev]);
+        setIncidents((prev) => [{ ...payload, id: 'di-' + Date.now(), fleet_vehicles: veh ? { unit_id: veh.unit_id } : null, status: 'open', created_at: new Date().toISOString() }, ...prev]);
       } else {
         const rec = await api.createIncident(payload);
         setIncidents((prev) => [rec, ...prev]);
@@ -259,7 +259,7 @@ export default function Incidents() {
               <select value={form.vehicle_id} onChange={(e) => setForm((f) => ({ ...f, vehicle_id: e.target.value }))}
                 style={{ width: '100%', marginTop: 4, background: '#0f1117', border: '1px solid #2e3347', borderRadius: 8, color: '#f1f5f9', fontSize: 13, padding: '8px 10px' }}>
                 <option value="">None / Unknown</option>
-                {vehicles.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {vehicles.map((v) => <option key={v.id} value={v.id}>{v.unit_id}</option>)}
               </select>
             </div>
             <div>
@@ -366,7 +366,7 @@ export default function Incidents() {
                       <span style={{ fontSize: 10, fontWeight: 700, color: st.color, padding: '2px 7px', borderRadius: 4, background: `${st.color}20`, textTransform: 'uppercase' }}>{st.label}</span>
                     </div>
                     <div style={{ fontSize: 12, color: '#8892a4' }}>
-                      {inc.date}{inc.time ? ` · ${inc.time}` : ''}{inc.fleet_vehicles ? ` · ${inc.fleet_vehicles.name}` : ''}{inc.driver_name ? ` · ${inc.driver_name}` : ''}
+                      {inc.date}{inc.time ? ` · ${inc.time}` : ''}{inc.fleet_vehicles ? ` · ${inc.fleet_vehicles.unit_id}` : ''}{inc.driver_name ? ` · ${inc.driver_name}` : ''}
                     </div>
                   </div>
                   <div style={{ fontSize: 18, color: '#8892a4', userSelect: 'none' }}>{isOpen ? '▲' : '▼'}</div>
