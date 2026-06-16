@@ -1,9 +1,10 @@
 const supabase = require('../../db/supabase');
 
-// Simple counter to generate transaction IDs
-// In production this could use a DB sequence; for Phase 1 a timestamp-based ID is fine
+// Module-level counter seeded from current time. Incrementing ensures uniqueness
+// even when two connectors start within the same second on the same server.
+let _txCounter = Math.floor(Date.now() / 1000);
 function generateTransactionId() {
-  return Math.floor(Date.now() / 1000);
+  return ++_txCounter;
 }
 
 async function handleStartTransaction(chargePointId, payload) {

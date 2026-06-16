@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -12,9 +12,10 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/rfid',           icon: CreditCard,      label: 'RFID Tags',      settingKey: 'nav_rfid_tags' },
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
-  { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
-  { to: '/issues',         icon: AlertTriangle,   label: 'Issues',         settingKey: null, badge: true },
-  { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
+  { to: '/billing',        icon: DollarSign,          label: 'Billing',        settingKey: null },
+  { to: '/issues',         icon: AlertTriangle,       label: 'Issues',         settingKey: null, badge: true },
+  { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
+  { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
 ];
 
 const ADMIN_ONLY_NAV = [
@@ -27,9 +28,10 @@ const VIEWER_NAV = [
   { to: '/logs',           icon: ScrollText,      label: 'Logs',           settingKey: null },
   { to: '/charge-trucks',  icon: Truck,           label: 'Charge Trucks',  settingKey: null },
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
-  { to: '/billing',        icon: DollarSign,      label: 'Billing',        settingKey: null },
-  { to: '/issues',         icon: AlertTriangle,   label: 'Issues',         settingKey: null, badge: true },
-  { to: '/settings',       icon: Settings,        label: 'Settings',       settingKey: null },
+  { to: '/billing',        icon: DollarSign,          label: 'Billing',        settingKey: null },
+  { to: '/issues',         icon: AlertTriangle,       label: 'Issues',         settingKey: null, badge: true },
+  { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
+  { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
 ];
 
 const DRIVER_NAV = [
