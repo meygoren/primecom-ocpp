@@ -18,6 +18,7 @@ import EnergyForward from './pages/EnergyForward';
 import Billing from './pages/Billing';
 import Issues from './pages/Issues';
 import OcppConfig from './pages/OcppConfig';
+import Export from './pages/Export';
 
 function Layout({ children }) {
   return (
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/billing" element={<PrivateRoute session={session}><Billing /></PrivateRoute>} />
           <Route path="/issues" element={<PrivateRoute session={session}><Issues /></PrivateRoute>} />
           <Route path="/ocpp-config" element={<PrivateRoute session={session}><OcppConfig /></PrivateRoute>} />
+          <Route path="/export" element={<PrivateRoute session={session}><Export /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -113,4 +113,26 @@ export const api = {
   deleteIssue: (id) => request(`/api/issues/${id}`, { method: 'DELETE' }),
   getIssueSettings: () => request('/api/issues/settings'),
   saveIssueSettings: (body) => request('/api/issues/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // Export
+  getExportMeasurands: (chargerId, from, to) => {
+    const q = new URLSearchParams({ ...(from && { from }), ...(to && { to }) }).toString();
+    return request(`/api/export/${encodeURIComponent(chargerId)}/measurands${q ? '?' + q : ''}`);
+  },
+
+  downloadExport: async (path) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(`${BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const filename = cd.match(/filename="(.+?)"/)?.[1] || 'export.csv';
+    return { blob, filename };
+  },
 };
