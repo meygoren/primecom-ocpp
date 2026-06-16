@@ -313,7 +313,7 @@ function VehicleDetail({ vehicle, isDemo, onBack, onSave, onDelete, canEdit }) {
                     ? 'https://autoimage.capitalone.com/stock-media/evox/2023-Tesla-Model_Y-Long_Range-PBSB-52157_cc2400_032_PBSB.png'
                     : null);
                 return imgUrl ? (
-                  <div style={{ flexShrink: 0, width: 220, height: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ flexShrink: 0, width: 286, height: 143, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <img
                       src={imgUrl}
                       alt={`${vehicle.make} ${vehicle.model}`}
