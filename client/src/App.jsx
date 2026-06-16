@@ -28,6 +28,7 @@ import Employees from './pages/Employees';
 import Schedules from './pages/Schedules';
 import FuelLog from './pages/FuelLog';
 import Expenses from './pages/Expenses';
+import TruckMap from './pages/TruckMap';
 
 function Layout({ children }) {
   return (
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/fleet-assets" element={<PrivateRoute session={session}><FleetAssets /></PrivateRoute>} />
           <Route path="/customers" element={<PrivateRoute session={session}><Customers /></PrivateRoute>} />
           <Route path="/incidents" element={<PrivateRoute session={session}><Incidents /></PrivateRoute>} />
+          <Route path="/truck-map" element={<PrivateRoute session={session}><TruckMap /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

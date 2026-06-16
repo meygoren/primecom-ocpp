@@ -227,4 +227,8 @@ export const api = {
   createIncident: (body) => request('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
   updateIncident: (id, body) => request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteIncident: (id) => request(`/api/incidents/${id}`, { method: 'DELETE' }),
+
+  // Truck Map
+  getTruckMapData: () => request('/api/truck-map/trucks'),
+  postTruckLocation: (body) => request('/api/truck-map/location', { method: 'POST', body: JSON.stringify(body) }),
 };

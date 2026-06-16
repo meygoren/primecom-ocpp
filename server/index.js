@@ -41,6 +41,7 @@ const expensesRouter = require('./routes/expenses');
 const fleetAssetsRouter = require('./routes/fleetAssets');
 const customersRouter = require('./routes/customers');
 const incidentsRouter = require('./routes/incidents');
+const truckMapRouter = require('./routes/truckMap');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -83,6 +84,7 @@ app.use('/api/expenses', expensesRouter);
 app.use('/api/fleet-assets', fleetAssetsRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/incidents', incidentsRouter);
+app.use('/api/truck-map', truckMapRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);

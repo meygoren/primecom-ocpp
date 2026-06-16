@@ -7,6 +7,7 @@ const handleStopTransaction = require('./messages/stopTransaction');
 const handleMeterValues = require('./messages/meterValues');
 const handleAuthorize = require('./messages/authorize');
 const handleFirmwareStatusNotification = require('./messages/firmwareStatusNotification');
+const handleDataTransfer = require('./messages/dataTransfer');
 
 const MESSAGE_TYPE_CALL = 2;
 const MESSAGE_TYPE_CALLRESULT = 3;
@@ -111,8 +112,7 @@ async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
         response = {};
         break;
       case 'DataTransfer':
-        console.log(`[DataTransfer] ${chargePointId}:`, payload);
-        response = { status: 'Accepted' };
+        response = await handleDataTransfer(chargePointId, payload);
         break;
       default:
         console.warn(`[Handler] Unhandled action '${action}' from ${chargePointId}`);
