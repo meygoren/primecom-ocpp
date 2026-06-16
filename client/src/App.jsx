@@ -20,6 +20,8 @@ import Issues from './pages/Issues';
 import OcppConfig from './pages/OcppConfig';
 import Export from './pages/Export';
 import Vehicles from './pages/Vehicles';
+import Employees from './pages/Employees';
+import Schedules from './pages/Schedules';
 
 function Layout({ children }) {
   return (
@@ -83,6 +85,8 @@ export default function App() {
           <Route path="/ocpp-config" element={<PrivateRoute session={session}><OcppConfig /></PrivateRoute>} />
           <Route path="/export" element={<PrivateRoute session={session}><Export /></PrivateRoute>} />
           <Route path="/vehicles" element={<PrivateRoute session={session}><Vehicles /></PrivateRoute>} />
+          <Route path="/employees" element={<PrivateRoute session={session}><Employees /></PrivateRoute>} />
+          <Route path="/schedules" element={<PrivateRoute session={session}><Schedules /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

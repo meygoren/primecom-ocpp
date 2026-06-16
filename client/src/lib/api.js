@@ -164,4 +164,26 @@ export const api = {
     const filename = cd.match(/filename="(.+?)"/)?.[1] || 'export.csv';
     return { blob, filename };
   },
+
+  // Employees
+  getEmployees: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/employees${q ? '?' + q : ''}`);
+  },
+  createEmployee: (data) => request('/api/employees', { method: 'POST', body: JSON.stringify(data) }),
+  updateEmployee: (id, data) => request(`/api/employees/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteEmployee: (id) => request(`/api/employees/${id}`, { method: 'DELETE' }),
+
+  // Schedules
+  getSchedule: (week) => request(`/api/schedules${week ? '?week=' + week : ''}`),
+  getMySchedule: (email, week) => request(`/api/schedules/my?email=${encodeURIComponent(email)}${week ? '&week=' + week : ''}`),
+  getShifts: () => request('/api/schedules/shifts'),
+  createAssignment: (data) => request('/api/schedules/assignments', { method: 'POST', body: JSON.stringify(data) }),
+  deleteAssignment: (id) => request(`/api/schedules/assignments/${id}`, { method: 'DELETE' }),
+  getTimeOffRequests: (employee_id) => request(`/api/schedules/time-off${employee_id ? '?employee_id=' + employee_id : ''}`),
+  createTimeOffRequest: (data) => request('/api/schedules/time-off', { method: 'POST', body: JSON.stringify(data) }),
+  reviewTimeOffRequest: (id, status) => request(`/api/schedules/time-off/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  getScheduleSettings: () => request('/api/schedules/settings'),
+  updateScheduleSettings: (data) => request('/api/schedules/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  sendScheduleNotification: (method) => request('/api/schedules/notify', { method: 'POST', body: JSON.stringify({ method }) }),
 };

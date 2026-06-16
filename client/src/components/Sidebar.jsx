@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2 } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -17,11 +17,13 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/vehicles',       icon: Car,                 label: 'VINs',           settingKey: null },
   { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
   { to: '/export',         icon: Download,            label: 'Export Data',    settingKey: null },
+  { to: '/schedules',      icon: Calendar,            label: 'Schedules',      settingKey: null },
   { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
 ];
 
 const ADMIN_ONLY_NAV = [
-  { to: '/accounts', icon: Users, label: 'Accounts', settingKey: null },
+  { to: '/accounts',   icon: Users,   label: 'Accounts',   settingKey: null },
+  { to: '/employees',  icon: Users2,  label: 'Employees',  settingKey: null },
 ];
 
 const VIEWER_NAV = [
@@ -39,8 +41,9 @@ const VIEWER_NAV = [
 ];
 
 const DRIVER_NAV = [
-  { to: '/',       icon: BatteryCharging, label: 'My Charger', settingKey: null },
-  { to: '/issues', icon: AlertTriangle,   label: 'Issues',     settingKey: null, badge: true },
+  { to: '/',          icon: BatteryCharging, label: 'My Charger', settingKey: null },
+  { to: '/schedules', icon: Calendar,        label: 'Schedules',  settingKey: null },
+  { to: '/issues',    icon: AlertTriangle,   label: 'Issues',     settingKey: null, badge: true },
 ];
 
 function getNavItems(role) {
