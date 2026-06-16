@@ -11,7 +11,11 @@ function buildConnectorList(sessions, mvRows) {
     .sort((a, b) => a.connector_id - b.connector_id)
     .map((session) => {
       const powerRow = latestMv[`${session.transaction_id}:Power.Active.Import`];
-      const tempRow = latestMv[`${session.transaction_id}:Temperature`];
+      const tempRow =
+        latestMv[`${session.transaction_id}:Temperature`] ||
+        latestMv[`${session.transaction_id}:DC.Temperature`] ||
+        latestMv[`${session.transaction_id}:CableTemp`] ||
+        latestMv[`${session.transaction_id}:ConnectorTemp`];
       let power_kw = null;
       if (powerRow) {
         const val = parseFloat(powerRow.value);
@@ -42,7 +46,7 @@ async function getConnectorLiveData(chargerId) {
     .from('meter_values')
     .select('transaction_id, measurand, value, unit')
     .in('transaction_id', txIds)
-    .in('measurand', ['Power.Active.Import', 'Temperature'])
+    .in('measurand', ['Power.Active.Import', 'Temperature', 'DC.Temperature', 'CableTemp', 'ConnectorTemp'])
     .order('timestamp', { ascending: false })
     .limit(txIds.length * 4 + 10);
 
@@ -67,7 +71,7 @@ async function getConnectorLiveDataBatch(chargerIds) {
       .from('meter_values')
       .select('transaction_id, measurand, value, unit')
       .in('transaction_id', txIds)
-      .in('measurand', ['Power.Active.Import', 'Temperature'])
+      .in('measurand', ['Power.Active.Import', 'Temperature', 'DC.Temperature', 'CableTemp', 'ConnectorTemp'])
       .order('timestamp', { ascending: false })
       .limit(txIds.length * 4 + 20);
     mvRows = data || [];
