@@ -57,7 +57,7 @@ export default function ChargerCard({ charger }) {
   const showHealth = localStorage.getItem('settings_feat_health_score') !== 'false';
   const health = calcHealthScore(charger);
   const healthColor = health >= 80 ? '#47a141' : health >= 50 ? '#f59e0b' : '#ef4444';
-  const isCharging = charger.status === 'charging';
+  const isCharging = charger.status === 'charging' || (charger.connectors_live?.length > 0 && charger.status !== 'offline');
   const connectors = charger.connectors_live || [];
 
   return (
