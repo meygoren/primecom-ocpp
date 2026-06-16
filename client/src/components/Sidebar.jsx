@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, ChevronDown, Wrench, UserSquare, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, ChevronDown, Wrench, UserSquare, ShieldAlert, MapPin } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { useFleet, FLEETS } from '../contexts/FleetContext';
 import { supabase } from '../lib/supabase';
@@ -13,6 +13,7 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/rfid',          icon: CreditCard,         label: 'RFID Tags',       settingKey: 'nav_rfid_tags' },
   { to: '/charge-trucks', icon: Truck,              label: 'Charge Trucks',   settingKey: null },
   { to: '/energy-forward',icon: Warehouse,          label: 'Energy Forward',  settingKey: null },
+  { to: '/truck-map',     icon: MapPin,             label: 'Truck Map',       settingKey: null },
   { to: '/billing',       icon: DollarSign,         label: 'Billing',         settingKey: null },
   { to: '/issues',        icon: AlertTriangle,      label: 'Issues',          settingKey: null, badge: true },
   { to: '/vehicles',      icon: Car,                label: 'VINs',            settingKey: null },
@@ -38,6 +39,7 @@ const VIEWER_NAV = [
   { to: '/logs',          icon: ScrollText,         label: 'Logs',            settingKey: null },
   { to: '/charge-trucks', icon: Truck,              label: 'Charge Trucks',   settingKey: null },
   { to: '/energy-forward',icon: Warehouse,          label: 'Energy Forward',  settingKey: null },
+  { to: '/truck-map',     icon: MapPin,             label: 'Truck Map',       settingKey: null },
   { to: '/billing',       icon: DollarSign,         label: 'Billing',         settingKey: null },
   { to: '/issues',        icon: AlertTriangle,      label: 'Issues',          settingKey: null, badge: true },
   { to: '/vehicles',      icon: Car,                label: 'VINs',            settingKey: null },
