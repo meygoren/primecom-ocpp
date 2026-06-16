@@ -297,13 +297,14 @@ function EtaPanel({ etaMinutes, confidence, charging, soc }) {
   );
 }
 
-// ── TruckTopDown ──────────────────────────────────────────────────────────────
-// Class-8 truck viewed from above. Back (rear doors) at top, front at bottom.
-// Left rectangle = P-side (passenger), Right rectangle = D-side (driver).
+// ── TruckRearView ─────────────────────────────────────────────────────────────
+// Class-8 truck viewed from the rear. Truck body at top, dual rear axle wheels
+// at the bottom. Passenger side (left) and Driver side (right) battery packs
+// are shown inside the trailer body. Truck number shown on the rear door.
 
 function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay, truckLabel }) {
   const anyCharging = pCharging || dCharging;
-  const bodyColor   = anyCharging ? '#1e2a3a' : '#1e2535';
+  const bodyColor   = anyCharging ? '#1a2640' : '#1a1f35';
   const borderColor = anyCharging ? '#3b82f666' : '#3a4060';
 
   if (emptyBay) {
@@ -323,109 +324,126 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, 
 
   return (
     <div style={{ width: '100%', userSelect: 'none' }}>
-      {/* Rear coupling / hitch bar */}
-      <div style={{
-        marginLeft: '5%', marginRight: '5%',
-        height: 8,
-        background: '#3a4060',
-        borderRadius: '6px 6px 0 0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div style={{ width: 30, height: 4, background: '#2e3347', borderRadius: 2 }} />
-      </div>
 
-      {/* Trailer body */}
+      {/* ── Truck rear body ── */}
       <div style={{
-        marginLeft: '5%', marginRight: '5%',
         background: bodyColor,
         border: `2px solid ${borderColor}`,
-        borderTop: 'none',
-        borderBottom: 'none',
-        padding: '14px 10px',
-        display: 'flex',
-        justifyContent: 'center',
-        gap: 14,
+        borderRadius: '10px 10px 4px 4px',
+        padding: '14px 12px 10px',
         transition: 'background 0.4s, border-color 0.4s',
-      }}>
-        {/* Passenger side: battery + predicted time to full */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
-          <EtaPanel etaMinutes={pEta} confidence={pConf} charging={pCharging} soc={pSoc} />
-        </div>
-
-        {/* Center structural beam */}
-        <div style={{ width: 8, background: '#2a2e40', borderRadius: 4, alignSelf: 'stretch' }} />
-
-        {/* Driver side: battery + predicted time to full */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
-          <EtaPanel etaMinutes={dEta} confidence={dConf} charging={dCharging} soc={dSoc} />
-        </div>
-      </div>
-
-      {/* Trailer → cab transition */}
-      <div style={{
-        marginLeft: '5%', marginRight: '5%',
-        height: 10,
-        background: '#2a2e40',
-        borderLeft: `2px solid ${borderColor}`,
-        borderRight: `2px solid ${borderColor}`,
-      }} />
-
-      {/* Cab body */}
-      <div style={{
-        marginLeft: '14%', marginRight: '14%',
-        background: '#22263a',
-        border: `2px solid ${borderColor}`,
-        borderBottom: 'none',
-        borderRadius: '6px 6px 0 0',
-        padding: '8px 10px',
         position: 'relative',
       }}>
-        {/* Side mirrors */}
-        <div style={{ position: 'absolute', left: -9, top: 6, width: 9, height: 14, background: '#3a4060', borderRadius: '3px 0 0 3px' }} />
-        <div style={{ position: 'absolute', right: -9, top: 6, width: 9, height: 14, background: '#3a4060', borderRadius: '0 3px 3px 0' }} />
+        {/* Truck number plate — center top of rear door */}
+        {truckLabel && (
+          <div style={{
+            position: 'absolute',
+            top: 10,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#47a14122',
+            border: '1px solid #47a14166',
+            borderRadius: 6,
+            padding: '3px 14px',
+            fontSize: 16,
+            fontWeight: 800,
+            color: '#47a141',
+            letterSpacing: '.08em',
+            textShadow: '0 0 10px #47a14188',
+            whiteSpace: 'nowrap',
+            zIndex: 2,
+          }}>
+            {truckLabel}
+          </div>
+        )}
 
-        {/* Windshield — shows truck number when assigned */}
-        <div style={{
-          height: truckLabel ? 34 : 20,
-          background: '#0f1117',
-          border: `1px solid ${truckLabel ? '#47a14166' : '#2e3347'}`,
-          borderRadius: 4,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          {truckLabel && (
-            <span style={{
-              color: '#47a141',
-              fontWeight: 800,
-              fontSize: 14,
-              letterSpacing: '.08em',
-              textShadow: '0 0 8px #47a14188',
-            }}>
-              {truckLabel}
-            </span>
-          )}
+        {/* Rear door horizontal divider bar (center brace) */}
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 6, background: '#2a2e40', transform: 'translateX(-50%)' }} />
+
+        {/* Taillights — top corners */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, paddingTop: truckLabel ? 28 : 0 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <div style={{ width: 18, height: 8, background: '#ef4444', borderRadius: 3, boxShadow: anyCharging ? '0 0 8px #ef444488' : 'none', opacity: 0.7 }} />
+            <div style={{ width: 10, height: 8, background: '#f59e0b', borderRadius: 3, opacity: 0.5 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <div style={{ width: 10, height: 8, background: '#f59e0b', borderRadius: 3, opacity: 0.5 }} />
+            <div style={{ width: 18, height: 8, background: '#ef4444', borderRadius: 3, boxShadow: anyCharging ? '0 0 8px #ef444488' : 'none', opacity: 0.7 }} />
+          </div>
         </div>
+
+        {/* Battery packs side by side inside trailer body */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, position: 'relative' }}>
+          {/* Passenger side */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'flex-end', paddingRight: 12 }}>
+            <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
+            <EtaPanel etaMinutes={pEta} confidence={pConf} charging={pCharging} soc={pSoc} />
+          </div>
+          {/* Driver side */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, paddingLeft: 12 }}>
+            <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
+            <EtaPanel etaMinutes={dEta} confidence={dConf} charging={dCharging} soc={dSoc} />
+          </div>
+        </div>
+
+        {/* Rear door bottom bar */}
+        <div style={{ height: 6, background: '#2a2e40', borderRadius: 3, marginTop: 10 }} />
       </div>
 
-      {/* Front bumper / grille */}
+      {/* ── Undercarriage / frame rail ── */}
+      <div style={{ marginLeft: '2%', marginRight: '2%', height: 10, background: '#2a2e40', borderLeft: `2px solid ${borderColor}`, borderRight: `2px solid ${borderColor}` }} />
+
+      {/* ── Dual rear axle with wheels ── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0, paddingLeft: '4%', paddingRight: '4%' }}>
+        {/* Left wheel cluster */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Wheel charging={anyCharging} />
+          <Wheel charging={anyCharging} />
+        </div>
+
+        {/* Axle bar — left */}
+        <div style={{ flex: 1, height: 8, background: '#3a4060', marginTop: 16, borderRadius: 2 }} />
+
+        {/* Differential housing */}
+        <div style={{ width: 28, height: 20, background: '#3a4060', borderRadius: 4, marginTop: 12, border: '1px solid #4a5080', flexShrink: 0 }} />
+
+        {/* Axle bar — right */}
+        <div style={{ flex: 1, height: 8, background: '#3a4060', marginTop: 16, borderRadius: 2 }} />
+
+        {/* Right wheel cluster */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Wheel charging={anyCharging} />
+          <Wheel charging={anyCharging} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Wheel({ charging }) {
+  return (
+    <div style={{
+      width: 32,
+      height: 40,
+      background: '#1a1d27',
+      border: `3px solid ${charging ? '#3b82f666' : '#3a4060'}`,
+      borderRadius: 6,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    }}>
+      {/* Rim */}
       <div style={{
-        marginLeft: '14%', marginRight: '14%',
-        height: 10,
-        background: '#3a4060',
-        borderRadius: '0 0 6px 6px',
+        width: 18,
+        height: 26,
+        borderRadius: 4,
+        border: `2px solid ${charging ? '#3b82f688' : '#4a5080'}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
       }}>
-        {[...Array(5)].map((_, i) => (
-          <div key={i} style={{ width: 3, height: 6, background: '#2e3347', borderRadius: 1 }} />
-        ))}
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: charging ? '#3b82f666' : '#3a4060' }} />
       </div>
     </div>
   );
@@ -582,23 +600,19 @@ function BayView({ label, charger1, charger2 }) {
 const TRUCK_NUMBERS = [1, 2, 3, 4, 5, 6];
 
 function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
-  const [forms, setForms]         = useState({});
-  const [saving, setSaving]       = useState(null);
-  const [saved, setSaved]         = useState(null);
-  const [truckForms, setTruckForms] = useState({});
+  const [forms, setForms]             = useState({});
+  const [saving, setSaving]           = useState(null);
+  const [saved, setSaved]             = useState(null);
+  const [truckForms, setTruckForms]   = useState({});
   const [truckSaving, setTruckSaving] = useState(null);
   const [truckSaved, setTruckSaved]   = useState(null);
-  const [bayA, setBayA]           = useState('');
-  const [bayB, setBayB]           = useState('');
-  const [bayAssigning, setBayAssigning] = useState(null);
-  const [vinResult, setVinResult] = useState({});
-  const [vinLoading, setVinLoading] = useState({});
+  const [clearing, setClearing]       = useState(null);
 
   // Bay A / Bay B current truck labels from live charger data
   const bayASlots = chargers.filter((c) => c.slot <= 2);
   const bayBSlots = chargers.filter((c) => c.slot > 2);
-  const currentBayA = bayASlots[0]?.current_truck_label || '';
-  const currentBayB = bayBSlots[0]?.current_truck_label || '';
+  const currentBayA = bayASlots[0]?.current_truck_label || null;
+  const currentBayB = bayBSlots[0]?.current_truck_label || null;
 
   // Charger slot forms
   useEffect(() => {
@@ -620,13 +634,6 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
     });
     setTruckForms(init);
   }, [truckProfiles]);
-
-  // Bay assignment labels default to current data
-  useEffect(() => {
-    setBayA(currentBayA);
-    setBayB(currentBayB);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBayA, currentBayB]);
 
   function setSlotField(id, field, value) {
     setForms((f) => ({ ...f, [id]: { ...f[id], [field]: value } }));
@@ -668,30 +675,15 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
     }
   }
 
-  async function assignBayTruck(bay, label) {
-    setBayAssigning(bay);
+  async function clearBay(bay) {
+    setClearing(bay);
     try {
-      await api.setBayTruck(bay, label || null);
+      await api.setBayTruck(bay, null);
       if (onSaved) onSaved();
     } catch (err) {
-      alert('Assign failed: ' + err.message);
+      alert('Clear failed: ' + err.message);
     } finally {
-      setBayAssigning(null);
-    }
-  }
-
-  async function transferVin(ocppId, slotKey) {
-    if (!ocppId) return alert('No OCPP ID configured for this slot');
-    setVinLoading((v) => ({ ...v, [slotKey]: true }));
-    setVinResult((v) => ({ ...v, [slotKey]: null }));
-    try {
-      const res = await api.transferVin(ocppId);
-      const msg = res?.result?.data || res?.result?.status || JSON.stringify(res?.result);
-      setVinResult((v) => ({ ...v, [slotKey]: { ok: true, msg } }));
-    } catch (err) {
-      setVinResult((v) => ({ ...v, [slotKey]: { ok: false, msg: err.message } }));
-    } finally {
-      setVinLoading((v) => ({ ...v, [slotKey]: false }));
+      setClearing(null);
     }
   }
 
@@ -699,80 +691,42 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
   const sectionHdr = { fontWeight: 700, fontSize: 13, color: '#f1f5f9', marginBottom: 4 };
   const sectionSub = { fontSize: 12, color: '#8892a4', marginBottom: 16, marginTop: 2 };
 
-  // Truck label options for bay assignment dropdown
-  const truckOptions = TRUCK_NUMBERS.map((n) => ({
-    value: truckForms[n]?.label || `TRUCK ${n}`,
-    label: truckForms[n]?.label || `TRUCK ${n}`,
-  }));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 28 }}>
 
-      {/* ── Bay Assignment ──────────────────────────────────────────────────── */}
+      {/* ── Current Bay Status (auto-detected, read-only) ───────────────────── */}
       <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
-          <div style={sectionHdr}>Bay Assignment</div>
-          <div style={sectionSub}>Select which truck is currently in each bay. Updates the truck number displayed on screen.</div>
+          <div style={sectionHdr}>Current Bay Status</div>
+          <div style={sectionSub}>
+            Truck identification is automatic — when a charging session starts, the system matches the vehicle MAC address to a truck profile and displays it here. Use "Clear" when a truck has driven away.
+          </div>
         </div>
-        <div style={{ padding: 20, display: 'flex', gap: 20 }}>
-          {[{ bay: 'A', value: bayA, setter: setBayA, slots: bayASlots },
-            { bay: 'B', value: bayB, setter: setBayB, slots: bayBSlots }].map(({ bay, value, setter, slots }) => {
-            const charger1 = slots[0];
-            const charger2 = slots[1];
-            const ocppIds = [charger1?.ocpp_id, charger2?.ocpp_id].filter(Boolean);
-            return (
-              <div key={bay} style={{ flex: 1, background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>Bay {bay}</div>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Truck in Bay</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <select
-                      value={value}
-                      onChange={(e) => setter(e.target.value)}
-                      style={{ ...inp, flex: 1 }}
-                    >
-                      <option value="">— Empty bay —</option>
-                      {truckOptions.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => assignBayTruck(bay, value)}
-                      disabled={bayAssigning === bay}
-                      style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '7px 14px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      {bayAssigning === bay ? 'Saving...' : 'Set'}
-                    </button>
-                  </div>
+        <div style={{ padding: 20, display: 'flex', gap: 16 }}>
+          {[{ bay: 'A', label: currentBayA }, { bay: 'B', label: currentBayB }].map(({ bay, label }) => (
+            <div key={bay} style={{ flex: 1, background: '#22263a', border: `1px solid ${label ? '#47a14144' : '#2e3347'}`, borderRadius: 10, padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: '#8892a4', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Bay {bay}</div>
+                {label ? (
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#47a141', letterSpacing: '.06em' }}>{label}</div>
+                ) : (
+                  <div style={{ fontSize: 14, color: '#4b5563', fontStyle: 'italic' }}>No truck detected</div>
+                )}
+                <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4 }}>
+                  {label ? 'Auto-detected via MAC address' : 'Will auto-update when a session starts'}
                 </div>
-                {/* Transfer VIN buttons */}
-                <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>Transfer VIN</div>
-                {ocppIds.length === 0 && <div style={{ fontSize: 11, color: '#4b5563' }}>No chargers configured</div>}
-                {ocppIds.map((ocppId, i) => {
-                  const key = `${bay}-${i}`;
-                  return (
-                    <div key={ocppId} style={{ marginBottom: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, color: '#6b7280', flex: 1, fontFamily: 'monospace' }}>{ocppId}</span>
-                        <button
-                          onClick={() => transferVin(ocppId, key)}
-                          disabled={vinLoading[key]}
-                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '4px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >
-                          {vinLoading[key] ? 'Sending...' : 'Transfer VIN'}
-                        </button>
-                      </div>
-                      {vinResult[key] && (
-                        <div style={{ fontSize: 11, marginTop: 4, color: vinResult[key].ok ? '#47a141' : '#ef4444', wordBreak: 'break-all' }}>
-                          {vinResult[key].msg}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
-            );
-          })}
+              {label && (
+                <button
+                  onClick={() => clearBay(bay)}
+                  disabled={clearing === bay}
+                  style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 7, padding: '6px 14px', color: '#8892a4', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  {clearing === bay ? 'Clearing...' : 'Clear'}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -781,7 +735,7 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
         <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
           <div style={sectionHdr}>Truck Profiles</div>
           <div style={sectionSub}>
-            Set the Passenger and Driver MAC addresses for each truck. When a charging session starts with a matching MAC, the truck is automatically identified in the bay.
+            Enter the MAC address for the Passenger and Driver side of each truck. Once saved, any session starting on these chargers will automatically show the correct truck number on screen — no manual input needed.
           </div>
         </div>
         <div style={{ padding: 20 }}>
@@ -794,11 +748,11 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
                   <input style={inp} value={truckForms[n]?.label || ''} onChange={(e) => setTruckField(n, 'label', e.target.value)} placeholder={`TRUCK ${n}`} />
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Passenger MAC Address</label>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Passenger Side MAC</label>
                   <input style={inp} value={truckForms[n]?.passenger_mac || ''} onChange={(e) => setTruckField(n, 'passenger_mac', e.target.value)} placeholder="e.g. AA:BB:CC:DD:EE:FF" />
                 </div>
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Driver MAC Address</label>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Driver Side MAC</label>
                   <input style={inp} value={truckForms[n]?.driver_mac || ''} onChange={(e) => setTruckField(n, 'driver_mac', e.target.value)} placeholder="e.g. AA:BB:CC:DD:EE:FF" />
                 </div>
                 <button
