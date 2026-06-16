@@ -25,16 +25,29 @@ async function handleStatusNotification(chargePointId, payload) {
   const { connectorId, status, errorCode, info, timestamp } = payload;
   const now = new Date().toISOString();
 
-  // Only update charger-level status from connector 0 or connector 1
-  // Connector 0 = the charger itself; connector 1+ = individual ports
   const mappedStatus = mapStatus(status);
+
+  // Auto-update connector_count if this StatusNotification is for a higher
+  // connector ID than what's currently stored.  connectorId 0 = charger itself.
+  const updates = { status: mappedStatus, last_seen: now };
+
+  if (connectorId && connectorId > 0) {
+    // Fetch current connector_count and bump it if needed
+    const { data: current } = await supabase
+      .from('chargers')
+      .select('connector_count')
+      .eq('charger_id', chargePointId)
+      .single();
+
+    const currentCount = current?.connector_count ?? 1;
+    if (connectorId > currentCount) {
+      updates.connector_count = connectorId;
+    }
+  }
 
   const { error } = await supabase
     .from('chargers')
-    .update({
-      status: mappedStatus,
-      last_seen: now,
-    })
+    .update(updates)
     .eq('charger_id', chargePointId);
 
   if (error) {
