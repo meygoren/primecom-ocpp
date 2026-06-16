@@ -96,6 +96,12 @@ export const api = {
   saveBillingSettings: (body) => request('/api/billing/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   sendBillingReport: () => request('/api/billing/send-report', { method: 'POST' }),
 
+  // Charger debug
+  getConnectedIds: () => request('/api/chargers/connected-ids'),
+
+  // Active session
+  getActiveSession: (chargerId) => request(`/api/sessions/active/${encodeURIComponent(chargerId)}`),
+
   // Charge trucks (used by Issues page for truck list)
   getChargeTrucks: () => request('/api/charge-trucks'),
 
