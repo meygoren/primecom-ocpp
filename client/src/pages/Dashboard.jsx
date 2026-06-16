@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showHidden, setShowHidden] = useState(false);
 
   const showFilter = localStorage.getItem('settings_feat_status_filter') !== 'false';
 
@@ -29,17 +30,22 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Separate visible vs hidden chargers
+  const visibleChargers = chargers.filter((c) => c.show_on_dashboard !== false);
+  const hiddenChargers = chargers.filter((c) => c.show_on_dashboard === false);
+  const displayedChargers = showHidden ? chargers : visibleChargers;
+
   const counts = {
-    total: chargers.length,
-    online: chargers.filter((c) => c.status === 'online').length,
-    charging: chargers.filter((c) => c.status === 'charging').length,
-    faulted: chargers.filter((c) => c.status === 'faulted').length,
-    offline: chargers.filter((c) => c.status === 'offline').length,
+    total: displayedChargers.length,
+    online: displayedChargers.filter((c) => c.status === 'online').length,
+    charging: displayedChargers.filter((c) => c.status === 'charging').length,
+    faulted: displayedChargers.filter((c) => c.status === 'faulted').length,
+    offline: displayedChargers.filter((c) => c.status === 'offline').length,
   };
 
   const filteredChargers = statusFilter === 'all'
-    ? chargers
-    : chargers.filter((c) => c.status === statusFilter);
+    ? displayedChargers
+    : displayedChargers.filter((c) => c.status === statusFilter);
 
   if (loading) return <PageShell><div style={{ color: '#8892a4', padding: 40 }}>Loading chargers...</div></PageShell>;
   if (error) return <PageShell><div style={{ color: '#ef4444', padding: 40 }}>{error}</div></PageShell>;
@@ -54,8 +60,29 @@ export default function Dashboard() {
         <StatCard label="Faulted" value={counts.faulted} color="#ef4444" />
       </div>
 
+      {/* Hidden charger toggle */}
+      {hiddenChargers.length > 0 && (
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => setShowHidden((v) => !v)}
+            style={{
+              background: showHidden ? '#2d5c2a33' : '#22263a',
+              border: `1px solid ${showHidden ? '#47a141' : '#2e3347'}`,
+              borderRadius: 6,
+              padding: '5px 14px',
+              color: showHidden ? '#47a141' : '#8892a4',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            {showHidden ? 'Hide disconnected chargers' : `Show ${hiddenChargers.length} hidden charger${hiddenChargers.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      )}
+
       {/* Status filter */}
-      {showFilter && chargers.length > 0 && (
+      {showFilter && displayedChargers.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
           <span style={{ fontSize: 13, color: '#8892a4' }}>Filter:</span>
           {['all', 'online', 'charging', 'faulted', 'offline'].map((s) => (
@@ -80,7 +107,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {chargers.length === 0 ? (
+      {displayedChargers.length === 0 ? (
         <div
           style={{
             background: '#1a1d27',

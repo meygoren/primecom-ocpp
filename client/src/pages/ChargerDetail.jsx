@@ -277,6 +277,81 @@ export default function ChargerDetail() {
                 onFieldValueChange={setFieldValue}
               />
 
+              {/* Live connector power panel */}
+              {charger.connectors_live?.length > 0 && (
+                <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#8892a4', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 14 }}>
+                    Live Connector Data
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {charger.connectors_live.map((c) => {
+                      const MAX_KW = 150;
+                      const pct = c.power_kw != null ? Math.min(100, (c.power_kw / MAX_KW) * 100) : 0;
+                      return (
+                        <div key={c.connector_id}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>Connector {c.connector_id}</span>
+                            <span style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                              {c.temperature != null && (
+                                <span style={{ fontSize: 12, color: '#f59e0b' }}>Temp: {Math.round(c.temperature)}°C</span>
+                              )}
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#3b82f6' }}>
+                                {c.power_kw != null ? `${c.power_kw.toFixed(1)} kW` : '— kW'}
+                              </span>
+                            </span>
+                          </div>
+                          <div style={{ background: '#1a1d27', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${pct}%`,
+                                height: '100%',
+                                background: pct > 0 ? 'linear-gradient(90deg, #2563eb, #60a5fa)' : 'transparent',
+                                borderRadius: 4,
+                                transition: 'width 0.5s ease',
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                            <span style={{ fontSize: 10, color: '#8892a4' }}>0 kW</span>
+                            <span style={{ fontSize: 10, color: '#8892a4' }}>{MAX_KW} kW max</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Show on Dashboard toggle */}
+              <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9', marginBottom: 2 }}>Show on Dashboard</div>
+                  <div style={{ fontSize: 12, color: '#8892a4' }}>
+                    {charger.show_on_dashboard === false ? 'Hidden — this charger does not appear on the dashboard grid.' : 'Visible on the dashboard grid.'}
+                  </div>
+                </div>
+                {showNotesEdit && (
+                  <button
+                    onClick={async () => {
+                      const next = charger.show_on_dashboard === false ? true : false;
+                      const updated = await api.updateCharger(id, { show_on_dashboard: next });
+                      setCharger((prev) => ({ ...prev, ...updated }));
+                    }}
+                    style={{
+                      width: 44, height: 26, borderRadius: 999, border: 'none',
+                      background: charger.show_on_dashboard !== false ? '#47a141' : '#2e3347',
+                      position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 3,
+                      left: charger.show_on_dashboard !== false ? 22 : 3,
+                      width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+                    }} />
+                  </button>
+                )}
+              </div>
+
               {/* Auto-start (plug and charge) */}
               <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '16px 18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>

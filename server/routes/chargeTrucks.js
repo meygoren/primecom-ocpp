@@ -7,22 +7,13 @@ const { predictTimeToFull } = require('../services/socPredictor');
 async function getLiveData(ocppId) {
   if (!ocppId) return null;
 
-  const [socResult, powerResult, chargerResult, sessionsResult] = await Promise.all([
+  const [socResult, chargerResult, sessionsResult] = await Promise.all([
     // Latest SoC reading
     supabase
       .from('meter_values')
       .select('value, unit, timestamp')
       .eq('charger_id', ocppId)
       .eq('measurand', 'SoC')
-      .order('timestamp', { ascending: false })
-      .limit(1),
-
-    // Latest power reading
-    supabase
-      .from('meter_values')
-      .select('value, unit, timestamp')
-      .eq('charger_id', ocppId)
-      .eq('measurand', 'Power.Active.Import')
       .order('timestamp', { ascending: false })
       .limit(1),
 
@@ -42,15 +33,49 @@ async function getLiveData(ocppId) {
   ]);
 
   const soc = socResult.data?.[0]?.value ?? null;
-  const powerRaw = powerResult.data?.[0];
-  let power_kw = null;
-  if (powerRaw) {
-    const val = parseFloat(powerRaw.value);
-    power_kw = powerRaw.unit === 'W' ? val / 1000 : val;
-  }
-
   const charger = chargerResult.data || null;
   const activeSessions = sessionsResult.data || [];
+
+  // Get power per active session (transaction-based for accuracy)
+  let power_kw = null;
+  const txIds = activeSessions.map((s) => s.transaction_id).filter(Boolean);
+  if (txIds.length > 0) {
+    const { data: powerRows } = await supabase
+      .from('meter_values')
+      .select('value, unit, transaction_id')
+      .in('transaction_id', txIds)
+      .eq('charger_id', ocppId)
+      .eq('measurand', 'Power.Active.Import')
+      .order('timestamp', { ascending: false })
+      .limit(txIds.length * 2 + 5);
+
+    const seen = new Set();
+    let total = 0;
+    for (const row of (powerRows || [])) {
+      if (!seen.has(row.transaction_id)) {
+        seen.add(row.transaction_id);
+        const val = parseFloat(row.value);
+        total += row.unit === 'W' ? val / 1000 : val;
+      }
+    }
+    if (seen.size > 0) power_kw = total;
+  }
+
+  // Fall back to latest aggregate reading if no transaction-based data
+  if (power_kw === null) {
+    const { data: powerRows } = await supabase
+      .from('meter_values')
+      .select('value, unit')
+      .eq('charger_id', ocppId)
+      .eq('measurand', 'Power.Active.Import')
+      .order('timestamp', { ascending: false })
+      .limit(1);
+    const powerRaw = powerRows?.[0];
+    if (powerRaw) {
+      const val = parseFloat(powerRaw.value);
+      power_kw = powerRaw.unit === 'W' ? val / 1000 : val;
+    }
+  }
 
   // Build connector array from active sessions
   const connectors = [

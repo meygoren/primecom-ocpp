@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
 const connections = require('../state/connections');
+const { getConnectorLiveData } = require('../utils/liveData');
 
 // GET /api/chargers/connected-ids — expose the in-memory connections map keys
 // Lets the dashboard diagnose ID mismatches between the DB and WebSocket URLs.
@@ -56,13 +57,14 @@ router.get('/:id', async (req, res) => {
     return res.status(404).json({ error: 'Charger not found' });
   }
 
-  res.json({ ...data, connected: connections.has(id) });
+  const connectors_live = await getConnectorLiveData(id);
+  res.json({ ...data, connected: connections.has(id), connectors_live });
 });
 
 // PATCH /api/chargers/:id — update label or notes
 router.patch('/:id', async (req, res) => {
   const { id } = req.params;
-  const { location_label, notes, connector_count, rated_kw, auto_start_enabled, auto_start_id_tag } = req.body;
+  const { location_label, notes, connector_count, rated_kw, auto_start_enabled, auto_start_id_tag, show_on_dashboard } = req.body;
 
   const updates = {};
   if (location_label !== undefined) updates.location_label = location_label;
@@ -71,6 +73,7 @@ router.patch('/:id', async (req, res) => {
   if (rated_kw !== undefined) updates.rated_kw = rated_kw !== '' ? parseFloat(rated_kw) : null;
   if (auto_start_enabled !== undefined) updates.auto_start_enabled = auto_start_enabled;
   if (auto_start_id_tag !== undefined) updates.auto_start_id_tag = auto_start_id_tag || null;
+  if (show_on_dashboard !== undefined) updates.show_on_dashboard = show_on_dashboard;
 
   const { data, error } = await supabase
     .from('chargers')

@@ -1,6 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
+const connections = require('../state/connections');
+const { getConnectorLiveDataBatch } = require('../utils/liveData');
+
+async function enrichChargers(chargers) {
+  const ids = chargers.map((c) => c.charger_id);
+  const liveMap = await getConnectorLiveDataBatch(ids);
+  return chargers.map((c) => ({
+    ...c,
+    connected: connections.has(c.charger_id),
+    connectors_live: liveMap[c.charger_id] || [],
+  }));
+}
 
 async function getUserFromReq(req) {
   const auth = req.headers.authorization;
@@ -29,7 +41,7 @@ router.get('/chargers', async (req, res) => {
 
   if (['admin', 'operator', 'viewer'].includes(role)) {
     const { data } = await supabase.from('chargers').select('*').order('charger_id');
-    return res.json(data || []);
+    return res.json(await enrichChargers(data || []));
   }
 
   // Driver: assigned chargers only
@@ -38,7 +50,7 @@ router.get('/chargers', async (req, res) => {
   const ids = (assignments || []).map((a) => a.charger_id);
   if (!ids.length) return res.json([]);
   const { data: chargers } = await supabase.from('chargers').select('*').in('charger_id', ids);
-  res.json(chargers || []);
+  res.json(await enrichChargers(chargers || []));
 });
 
 // GET /api/me/driver
