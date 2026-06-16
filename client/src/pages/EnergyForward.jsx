@@ -58,6 +58,17 @@ function formatEta(minutes) {
   return { big: `${h}h ${m}m`, unit: '' };
 }
 
+function formatRelTime(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 // ── CableSVG ─────────────────────────────────────────────────────────────────
 // Draws two vertical cable lines from the charger pair down to the truck sides.
 
@@ -88,13 +99,10 @@ function CableSVG({ leftActive, rightActive }) {
 // One side of the truck. Fixed width, tall. Label above, then terminal cap,
 // then battery body: kW speed at top → SOC % center → kWh stored at bottom.
 
-function BatteryPack({ soc, charging, kw, label }) {
+function BatteryPack({ soc, charging, kw, label, sessionKwh }) {
   const color  = socColor(soc);
   const pct    = soc != null ? Math.min(100, Math.max(0, soc)) : null;
   const noData = pct === null;
-
-  // Truck battery pack capacity ~450 kWh
-  const currentKwh = pct != null ? ((pct / 100) * 450).toFixed(0) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
@@ -208,7 +216,7 @@ function BatteryPack({ soc, charging, kw, label }) {
             </span>
           </div>
 
-          {/* kWh stored at bottom */}
+          {/* kWh charged this session at bottom */}
           <div style={{
             fontSize: 11,
             fontWeight: 700,
@@ -217,7 +225,7 @@ function BatteryPack({ soc, charging, kw, label }) {
             textAlign: 'center',
             fontVariantNumeric: 'tabular-nums',
           }}>
-            {currentKwh != null ? `${currentKwh} kWh` : '—'}
+            {sessionKwh != null ? `${sessionKwh.toFixed(1)} kWh` : '—'}
           </div>
         </div>
       </div>
@@ -301,7 +309,7 @@ function EtaPanel({ etaMinutes, confidence, charging, soc }) {
 // Class-8 truck viewed from above. Back (rear doors) at top, front at bottom.
 // Left rectangle = P-side (passenger), Right rectangle = D-side (driver).
 
-function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay, truckLabel }) {
+function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay, truckLabel, pSessionKwh, dSessionKwh }) {
   const anyCharging = pCharging || dCharging;
   const bodyColor   = anyCharging ? '#1e2a3a' : '#1e2535';
   const borderColor = anyCharging ? '#3b82f666' : '#3a4060';
@@ -351,7 +359,7 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, 
       }}>
         {/* Passenger side: battery + predicted time to full */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" />
+          <BatteryPack soc={pSoc} charging={pCharging} kw={pKw} label="Passenger" sessionKwh={pSessionKwh} />
           <EtaPanel etaMinutes={pEta} confidence={pConf} charging={pCharging} soc={pSoc} />
         </div>
 
@@ -360,7 +368,7 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, 
 
         {/* Driver side: battery + predicted time to full */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" />
+          <BatteryPack soc={dSoc} charging={dCharging} kw={dKw} label="Driver" sessionKwh={dSessionKwh} />
           <EtaPanel etaMinutes={dEta} confidence={dConf} charging={dCharging} soc={dSoc} />
         </div>
       </div>
@@ -510,13 +518,29 @@ function BayView({ label, charger1, charger2 }) {
   const leftActive   = left1Active  || left2Active;
   const rightActive  = right1Active || right2Active;
 
-  const pSoc      = charger1?.live?.soc ?? null;
-  const dSoc      = charger2?.live?.soc ?? null;
-  const pCharging = charger1?.live?.status === 'charging';
-  const dCharging = charger2?.live?.status === 'charging';
+  const pActive   = charger1?.live?.is_active || false;
+  const dActive   = charger2?.live?.is_active || false;
+  const anyActive = pActive || dActive;
+
+  // Live SoC only shown during an active session
+  const pSoc      = pActive ? (charger1?.live?.soc ?? null) : null;
+  const dSoc      = dActive ? (charger2?.live?.soc ?? null) : null;
+  const pCharging = pActive;
+  const dCharging = dActive;
   const pKw       = charger1?.live?.power_kw || 0;
   const dKw       = charger2?.live?.power_kw || 0;
-  const emptyBay  = pSoc === null && dSoc === null && !pCharging && !dCharging;
+
+  // kWh charged this session
+  const pSessionKwh = charger1?.live?.session_kwh_charged ?? null;
+  const dSessionKwh = charger2?.live?.session_kwh_charged ?? null;
+
+  // Last known SoC (persists after session ends, for idle display)
+  const pLastSoc   = charger1?.live?.last_soc ?? null;
+  const dLastSoc   = charger2?.live?.last_soc ?? null;
+  const lastSocTime = charger1?.live?.last_soc_time || charger2?.live?.last_soc_time || null;
+
+  const emptyBay        = !anyActive;
+  const showLastSession = !anyActive && (pLastSoc !== null || dLastSoc !== null);
 
   // Server-blended prediction first; client physics estimate as fallback
   const pEta  = charger1?.live?.eta_minutes ?? clientPhysicsEta(pSoc, pKw);
@@ -571,7 +595,35 @@ function BayView({ label, charger1, charger2 }) {
           pConf={pConf} dConf={dConf}
           emptyBay={emptyBay}
           truckLabel={truckLabel}
+          pSessionKwh={pSessionKwh}
+          dSessionKwh={dSessionKwh}
         />
+
+        {/* Last session info — shown when idle but SoC data is available */}
+        {showLastSession && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#0f111788', borderRadius: 8, border: '1px dashed #2e3347' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Last Session
+            </div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              {pLastSoc !== null && (
+                <span style={{ fontSize: 12, color: '#8892a4' }}>
+                  P-Side: <span style={{ color: socColor(pLastSoc), fontWeight: 700 }}>{Math.round(pLastSoc)}%</span>
+                </span>
+              )}
+              {dLastSoc !== null && (
+                <span style={{ fontSize: 12, color: '#8892a4' }}>
+                  D-Side: <span style={{ color: socColor(dLastSoc), fontWeight: 700 }}>{Math.round(dLastSoc)}%</span>
+                </span>
+              )}
+              {lastSocTime && (
+                <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>
+                  {formatRelTime(lastSocTime)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
