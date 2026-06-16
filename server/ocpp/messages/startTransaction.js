@@ -70,6 +70,33 @@ async function handleStartTransaction(chargePointId, payload) {
     }
   }
 
+  // Auto Transfer VIN — send DataTransfer(GetVIN) if enabled for this charger
+  try {
+    const { data: chargerRow } = await supabase
+      .from('chargers')
+      .select('auto_transfer_vin_enabled')
+      .eq('charger_id', chargePointId)
+      .single();
+
+    if (chargerRow?.auto_transfer_vin_enabled) {
+      const { sendCommand } = require('../commands/sendCommand');
+      setTimeout(async () => {
+        try {
+          await sendCommand(chargePointId, 'DataTransfer', {
+            vendorId: 'Primecom',
+            messageId: 'GetVIN',
+            data: '',
+          });
+          console.log(`[StartTransaction] Auto Transfer VIN sent to ${chargePointId}`);
+        } catch (err) {
+          console.error(`[StartTransaction] Auto Transfer VIN failed for ${chargePointId}:`, err.message);
+        }
+      }, 2000);
+    }
+  } catch (err) {
+    console.error('[StartTransaction] Auto Transfer VIN check error:', err.message);
+  }
+
   return {
     transactionId,
     idTagInfo: { status: 'Accepted' },

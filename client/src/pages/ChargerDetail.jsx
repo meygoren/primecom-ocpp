@@ -352,6 +352,49 @@ export default function ChargerDetail() {
                 )}
               </div>
 
+              {/* Auto Transfer VIN */}
+              <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', marginBottom: 4 }}>Auto Transfer VIN</div>
+                    <div style={{ fontSize: 12, color: '#8892a4', lineHeight: 1.5 }}>
+                      Automatically sends a DataTransfer (GetVIN) request to this charger when a charging session starts, to capture the vehicle MAC address.
+                    </div>
+                  </div>
+                  {showNotesEdit && (
+                    <button
+                      onClick={async () => {
+                        const next = !charger.auto_transfer_vin_enabled;
+                        const updated = await api.updateCharger(id, { auto_transfer_vin_enabled: next });
+                        setCharger((prev) => ({ ...prev, ...updated }));
+                      }}
+                      style={{
+                        width: 44,
+                        height: 26,
+                        borderRadius: 999,
+                        border: 'none',
+                        background: charger.auto_transfer_vin_enabled ? '#47a141' : '#2e3347',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      <span style={{
+                        position: 'absolute',
+                        top: 3,
+                        left: charger.auto_transfer_vin_enabled ? 22 : 3,
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left 0.2s',
+                      }} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Auto-start (plug and charge) */}
               <div style={{ gridColumn: '1 / -1', background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '16px 18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
