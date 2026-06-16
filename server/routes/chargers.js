@@ -56,12 +56,13 @@ router.get('/:id', async (req, res) => {
 // PATCH /api/chargers/:id — update label or notes
 router.patch('/:id', async (req, res) => {
   const { id } = req.params;
-  const { location_label, notes, connector_count } = req.body;
+  const { location_label, notes, connector_count, rated_kw } = req.body;
 
   const updates = {};
   if (location_label !== undefined) updates.location_label = location_label;
   if (notes !== undefined) updates.notes = notes;
   if (connector_count !== undefined) updates.connector_count = connector_count;
+  if (rated_kw !== undefined) updates.rated_kw = rated_kw !== '' ? parseFloat(rated_kw) : null;
 
   const { data, error } = await supabase
     .from('chargers')

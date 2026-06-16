@@ -212,7 +212,32 @@ export default function ChargerDetail() {
               <InfoCard label="Firmware" value={charger.firmware_version || '—'} />
               <InfoCard label="Last Heartbeat" value={charger.last_heartbeat ? formatDistanceToNow(charger.last_heartbeat) : 'Never'} />
               <InfoCard label="Last Seen" value={charger.last_seen ? formatDateTime(charger.last_seen) : '—'} />
-              <InfoCard label="Connectors" value={charger.connector_count ?? 1} />
+              <EditableInfoCard
+                label="Connectors"
+                value={charger.connector_count ?? 1}
+                field="connector_count"
+                editingField={editingField}
+                fieldValue={fieldValue}
+                fieldSaving={fieldSaving}
+                showEdit={showNotesEdit}
+                onStartEdit={(field, val) => { setEditingField(field); setFieldValue(String(val)); }}
+                onSave={saveField}
+                onCancel={() => setEditingField(null)}
+                onFieldValueChange={setFieldValue}
+              />
+              <EditableInfoCard
+                label="Rated Power"
+                value={charger.rated_kw != null ? `${charger.rated_kw} kW` : '—'}
+                field="rated_kw"
+                editingField={editingField}
+                fieldValue={fieldValue}
+                fieldSaving={fieldSaving}
+                showEdit={showNotesEdit}
+                onStartEdit={(field, val) => { setEditingField(field); setFieldValue(val === '—' ? '' : String(val).replace(' kW', '')); }}
+                onSave={saveField}
+                onCancel={() => setEditingField(null)}
+                onFieldValueChange={setFieldValue}
+              />
 
               {/* Editable Location */}
               <EditableInfoCard
