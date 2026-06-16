@@ -114,6 +114,14 @@ export const api = {
   getIssueSettings: () => request('/api/issues/settings'),
   saveIssueSettings: (body) => request('/api/issues/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 
+  // EF Truck profiles
+  getTruckProfiles: () => request('/api/charge-trucks/truck-profiles'),
+  saveTruckProfile: (body) => request('/api/charge-trucks/truck-profiles', { method: 'POST', body: JSON.stringify(body) }),
+  setBayTruck: (bay, current_truck_label) =>
+    request(`/api/charge-trucks/warehouse/bay/${bay}/truck`, { method: 'PATCH', body: JSON.stringify({ current_truck_label }) }),
+  transferVin: (chargerId) =>
+    request(`/api/commands/${encodeURIComponent(chargerId)}/transfer-vin`, { method: 'POST' }),
+
   // Export
   getExportMeasurands: (chargerId, from, to) => {
     const q = new URLSearchParams({ ...(from && { from }), ...(to && { to }) }).toString();

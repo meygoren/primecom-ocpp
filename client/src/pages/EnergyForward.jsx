@@ -301,7 +301,7 @@ function EtaPanel({ etaMinutes, confidence, charging, soc }) {
 // Class-8 truck viewed from above. Back (rear doors) at top, front at bottom.
 // Left rectangle = P-side (passenger), Right rectangle = D-side (driver).
 
-function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay }) {
+function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, pConf, dConf, emptyBay, truckLabel }) {
   const anyCharging = pCharging || dCharging;
   const bodyColor   = anyCharging ? '#1e2a3a' : '#1e2535';
   const borderColor = anyCharging ? '#3b82f666' : '#3a4060';
@@ -388,14 +388,28 @@ function TruckTopDown({ pSoc, dSoc, pCharging, dCharging, pKw, dKw, pEta, dEta, 
         <div style={{ position: 'absolute', left: -9, top: 6, width: 9, height: 14, background: '#3a4060', borderRadius: '3px 0 0 3px' }} />
         <div style={{ position: 'absolute', right: -9, top: 6, width: 9, height: 14, background: '#3a4060', borderRadius: '0 3px 3px 0' }} />
 
-        {/* Windshield */}
+        {/* Windshield — shows truck number when assigned */}
         <div style={{
-          height: 20,
+          height: truckLabel ? 34 : 20,
           background: '#0f1117',
-          border: '1px solid #2e3347',
+          border: `1px solid ${truckLabel ? '#47a14166' : '#2e3347'}`,
           borderRadius: 4,
-          opacity: 0.8,
-        }} />
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          {truckLabel && (
+            <span style={{
+              color: '#47a141',
+              fontWeight: 800,
+              fontSize: 14,
+              letterSpacing: '.08em',
+              textShadow: '0 0 8px #47a14188',
+            }}>
+              {truckLabel}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Front bumper / grille */}
@@ -510,6 +524,9 @@ function BayView({ label, charger1, charger2 }) {
   const pConf = charger1?.live?.eta_minutes != null ? charger1.live.eta_confidence : (pEta != null ? 'low' : null);
   const dConf = charger2?.live?.eta_minutes != null ? charger2.live.eta_confidence : (dEta != null ? 'low' : null);
 
+  // Truck label: either charger in this bay may carry it
+  const truckLabel = charger1?.current_truck_label || charger2?.current_truck_label || null;
+
   return (
     <div style={{
       flex: 1,
@@ -523,11 +540,16 @@ function BayView({ label, charger1, charger2 }) {
         background: '#22263a',
         borderBottom: '1px solid #2e3347',
         padding: '12px 18px',
-        fontSize: 13,
-        fontWeight: 700,
-        color: '#f1f5f9',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
-        {label}
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>{label}</span>
+        {truckLabel && (
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#47a141', letterSpacing: '.06em' }}>
+            {truckLabel}
+          </span>
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
@@ -548,6 +570,7 @@ function BayView({ label, charger1, charger2 }) {
           pEta={pEta} dEta={dEta}
           pConf={pConf} dConf={dConf}
           emptyBay={emptyBay}
+          truckLabel={truckLabel}
         />
       </div>
     </div>
@@ -556,22 +579,60 @@ function BayView({ label, charger1, charger2 }) {
 
 // ── WarehouseSettingsPanel ────────────────────────────────────────────────────
 
-function WarehouseSettingsPanel({ chargers, onSaved }) {
-  const [forms, setForms] = useState({});
-  const [saving, setSaving] = useState(null);
-  const [saved, setSaved]   = useState(null);
+const TRUCK_NUMBERS = [1, 2, 3, 4, 5, 6];
 
+function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
+  const [forms, setForms]         = useState({});
+  const [saving, setSaving]       = useState(null);
+  const [saved, setSaved]         = useState(null);
+  const [truckForms, setTruckForms] = useState({});
+  const [truckSaving, setTruckSaving] = useState(null);
+  const [truckSaved, setTruckSaved]   = useState(null);
+  const [bayA, setBayA]           = useState('');
+  const [bayB, setBayB]           = useState('');
+  const [bayAssigning, setBayAssigning] = useState(null);
+  const [vinResult, setVinResult] = useState({});
+  const [vinLoading, setVinLoading] = useState({});
+
+  // Bay A / Bay B current truck labels from live charger data
+  const bayASlots = chargers.filter((c) => c.slot <= 2);
+  const bayBSlots = chargers.filter((c) => c.slot > 2);
+  const currentBayA = bayASlots[0]?.current_truck_label || '';
+  const currentBayB = bayBSlots[0]?.current_truck_label || '';
+
+  // Charger slot forms
   useEffect(() => {
     const init = {};
     chargers.forEach((c) => { init[c.id] = { label: c.label || '', ocpp_id: c.ocpp_id || '' }; });
     setForms(init);
   }, [chargers]);
 
-  function setField(id, field, value) {
+  // Truck profile forms — one row per truck number 1-6
+  useEffect(() => {
+    const init = {};
+    TRUCK_NUMBERS.forEach((n) => {
+      const existing = truckProfiles.find((p) => p.truck_number === n);
+      init[n] = {
+        label: existing?.label || `TRUCK ${n}`,
+        passenger_mac: existing?.passenger_mac || '',
+        driver_mac: existing?.driver_mac || '',
+      };
+    });
+    setTruckForms(init);
+  }, [truckProfiles]);
+
+  // Bay assignment labels default to current data
+  useEffect(() => {
+    setBayA(currentBayA);
+    setBayB(currentBayB);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBayA, currentBayB]);
+
+  function setSlotField(id, field, value) {
     setForms((f) => ({ ...f, [id]: { ...f[id], [field]: value } }));
   }
 
-  async function save(c) {
+  async function saveSlot(c) {
     setSaving(c.id);
     try {
       await api.updateWarehouseCharger(c.id, { label: forms[c.id]?.label || null, ocpp_id: forms[c.id]?.ocpp_id || null });
@@ -585,32 +646,199 @@ function WarehouseSettingsPanel({ chargers, onSaved }) {
     }
   }
 
+  function setTruckField(n, field, value) {
+    setTruckForms((f) => ({ ...f, [n]: { ...f[n], [field]: value } }));
+  }
+
+  async function saveTruckProfile(n) {
+    setTruckSaving(n);
+    try {
+      await api.saveTruckProfile({
+        truck_number: n,
+        label: truckForms[n]?.label || `TRUCK ${n}`,
+        passenger_mac: truckForms[n]?.passenger_mac || null,
+        driver_mac: truckForms[n]?.driver_mac || null,
+      });
+      setTruckSaved(n);
+      setTimeout(() => setTruckSaved(null), 2000);
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    } finally {
+      setTruckSaving(null);
+    }
+  }
+
+  async function assignBayTruck(bay, label) {
+    setBayAssigning(bay);
+    try {
+      await api.setBayTruck(bay, label || null);
+      if (onSaved) onSaved();
+    } catch (err) {
+      alert('Assign failed: ' + err.message);
+    } finally {
+      setBayAssigning(null);
+    }
+  }
+
+  async function transferVin(ocppId, slotKey) {
+    if (!ocppId) return alert('No OCPP ID configured for this slot');
+    setVinLoading((v) => ({ ...v, [slotKey]: true }));
+    setVinResult((v) => ({ ...v, [slotKey]: null }));
+    try {
+      const res = await api.transferVin(ocppId);
+      const msg = res?.result?.data || res?.result?.status || JSON.stringify(res?.result);
+      setVinResult((v) => ({ ...v, [slotKey]: { ok: true, msg } }));
+    } catch (err) {
+      setVinResult((v) => ({ ...v, [slotKey]: { ok: false, msg: err.message } }));
+    } finally {
+      setVinLoading((v) => ({ ...v, [slotKey]: false }));
+    }
+  }
+
   const inp = { background: '#0f1117', border: '1px solid #2e3347', borderRadius: 6, padding: '7px 10px', color: '#f1f5f9', fontSize: 12, width: '100%', boxSizing: 'border-box', outline: 'none' };
+  const sectionHdr = { fontWeight: 700, fontSize: 13, color: '#f1f5f9', marginBottom: 4 };
+  const sectionSub = { fontSize: 12, color: '#8892a4', marginBottom: 16, marginTop: 2 };
+
+  // Truck label options for bay assignment dropdown
+  const truckOptions = TRUCK_NUMBERS.map((n) => ({
+    value: truckForms[n]?.label || `TRUCK ${n}`,
+    label: truckForms[n]?.label || `TRUCK ${n}`,
+  }));
 
   return (
-    <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden', marginTop: 28 }}>
-      <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: '#f1f5f9' }}>Warehouse Charger Configuration</div>
-        <div style={{ fontSize: 12, color: '#8892a4', marginTop: 3 }}>Assign OCPP IDs to warehouse charging slots</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 28 }}>
+
+      {/* ── Bay Assignment ──────────────────────────────────────────────────── */}
+      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
+          <div style={sectionHdr}>Bay Assignment</div>
+          <div style={sectionSub}>Select which truck is currently in each bay. Updates the truck number displayed on screen.</div>
+        </div>
+        <div style={{ padding: 20, display: 'flex', gap: 20 }}>
+          {[{ bay: 'A', value: bayA, setter: setBayA, slots: bayASlots },
+            { bay: 'B', value: bayB, setter: setBayB, slots: bayBSlots }].map(({ bay, value, setter, slots }) => {
+            const charger1 = slots[0];
+            const charger2 = slots[1];
+            const ocppIds = [charger1?.ocpp_id, charger2?.ocpp_id].filter(Boolean);
+            return (
+              <div key={bay} style={{ flex: 1, background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>Bay {bay}</div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Truck in Bay</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                      value={value}
+                      onChange={(e) => setter(e.target.value)}
+                      style={{ ...inp, flex: 1 }}
+                    >
+                      <option value="">— Empty bay —</option>
+                      {truckOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => assignBayTruck(bay, value)}
+                      disabled={bayAssigning === bay}
+                      style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '7px 14px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      {bayAssigning === bay ? 'Saving...' : 'Set'}
+                    </button>
+                  </div>
+                </div>
+                {/* Transfer VIN buttons */}
+                <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>Transfer VIN</div>
+                {ocppIds.length === 0 && <div style={{ fontSize: 11, color: '#4b5563' }}>No chargers configured</div>}
+                {ocppIds.map((ocppId, i) => {
+                  const key = `${bay}-${i}`;
+                  return (
+                    <div key={ocppId} style={{ marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, color: '#6b7280', flex: 1, fontFamily: 'monospace' }}>{ocppId}</span>
+                        <button
+                          onClick={() => transferVin(ocppId, key)}
+                          disabled={vinLoading[key]}
+                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '4px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          {vinLoading[key] ? 'Sending...' : 'Transfer VIN'}
+                        </button>
+                      </div>
+                      {vinResult[key] && (
+                        <div style={{ fontSize: 11, marginTop: 4, color: vinResult[key].ok ? '#47a141' : '#ef4444', wordBreak: 'break-all' }}>
+                          {vinResult[key].msg}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div style={{ padding: 20 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {chargers.map((c) => (
-            <div key={c.id} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 10 }}>Slot {c.slot} — {c.label || 'Charger'}</div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Label</label>
-                <input style={inp} value={forms[c.id]?.label || ''} onChange={(e) => setField(c.id, 'label', e.target.value)} placeholder={`Charger ${c.slot}`} />
+
+      {/* ── Truck Profiles ──────────────────────────────────────────────────── */}
+      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
+          <div style={sectionHdr}>Truck Profiles</div>
+          <div style={sectionSub}>
+            Set the Passenger and Driver MAC addresses for each truck. When a charging session starts with a matching MAC, the truck is automatically identified in the bay.
+          </div>
+        </div>
+        <div style={{ padding: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+            {TRUCK_NUMBERS.map((n) => (
+              <div key={n} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 10 }}>Truck {n}</div>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Display Label</label>
+                  <input style={inp} value={truckForms[n]?.label || ''} onChange={(e) => setTruckField(n, 'label', e.target.value)} placeholder={`TRUCK ${n}`} />
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Passenger MAC Address</label>
+                  <input style={inp} value={truckForms[n]?.passenger_mac || ''} onChange={(e) => setTruckField(n, 'passenger_mac', e.target.value)} placeholder="e.g. AA:BB:CC:DD:EE:FF" />
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Driver MAC Address</label>
+                  <input style={inp} value={truckForms[n]?.driver_mac || ''} onChange={(e) => setTruckField(n, 'driver_mac', e.target.value)} placeholder="e.g. AA:BB:CC:DD:EE:FF" />
+                </div>
+                <button
+                  onClick={() => saveTruckProfile(n)}
+                  disabled={truckSaving === n}
+                  style={{ background: truckSaved === n ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '7px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: truckSaving === n ? 'wait' : 'pointer', width: '100%' }}
+                >
+                  {truckSaving === n ? 'Saving...' : truckSaved === n ? 'Saved' : 'Save'}
+                </button>
               </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>OCPP ID</label>
-                <input style={inp} value={forms[c.id]?.ocpp_id || ''} onChange={(e) => setField(c.id, 'ocpp_id', e.target.value)} placeholder="e.g. WH-CHARGER-01" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Charger Slot Configuration ──────────────────────────────────────── */}
+      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '14px 20px' }}>
+          <div style={sectionHdr}>Warehouse Charger Configuration</div>
+          <div style={sectionSub}>Assign OCPP IDs to warehouse charging slots</div>
+        </div>
+        <div style={{ padding: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {chargers.map((c) => (
+              <div key={c.id} style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 10 }}>Slot {c.slot} — {c.label || 'Charger'}</div>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Label</label>
+                  <input style={inp} value={forms[c.id]?.label || ''} onChange={(e) => setSlotField(c.id, 'label', e.target.value)} placeholder={`Charger ${c.slot}`} />
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>OCPP ID</label>
+                  <input style={inp} value={forms[c.id]?.ocpp_id || ''} onChange={(e) => setSlotField(c.id, 'ocpp_id', e.target.value)} placeholder="e.g. WH-CHARGER-01" />
+                </div>
+                <button onClick={() => saveSlot(c)} disabled={saving === c.id} style={{ background: saved === c.id ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '7px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving === c.id ? 'wait' : 'pointer', width: '100%' }}>
+                  {saving === c.id ? 'Saving...' : saved === c.id ? 'Saved' : 'Save'}
+                </button>
               </div>
-              <button onClick={() => save(c)} disabled={saving === c.id} style={{ background: saved === c.id ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '7px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving === c.id ? 'wait' : 'pointer', width: '100%' }}>
-                {saving === c.id ? 'Saving...' : saved === c.id ? 'Saved' : 'Save'}
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -711,17 +939,22 @@ export default function EnergyForward() {
   const isAdmin   = profile?.role === 'admin';
   const isDriver  = profile?.role === 'driver';
 
-  const [chargers, setChargers]         = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [testMode, setTestMode]         = useState(false);
-  const [demoTick, setDemoTick]         = useState(0);
+  const [chargers, setChargers]           = useState([]);
+  const [truckProfiles, setTruckProfiles] = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
+  const [settingsOpen, setSettingsOpen]   = useState(false);
+  const [testMode, setTestMode]           = useState(false);
+  const [demoTick, setDemoTick]           = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const data = await api.getWarehouseChargers();
+      const [data, profiles] = await Promise.all([
+        api.getWarehouseChargers(),
+        api.getTruckProfiles().catch(() => []),
+      ]);
       setChargers(data);
+      setTruckProfiles(profiles);
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -849,7 +1082,7 @@ export default function EnergyForward() {
           </div>
 
           {isAdmin && settingsOpen && (
-            <WarehouseSettingsPanel chargers={chargers} onSaved={load} />
+            <WarehouseSettingsPanel chargers={chargers} truckProfiles={truckProfiles} onSaved={load} />
           )}
         </>
       )}

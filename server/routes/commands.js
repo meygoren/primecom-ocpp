@@ -129,4 +129,19 @@ router.post('/:id/clear-cache', requireConnected, async (req, res) => {
   }
 });
 
+// POST /api/commands/:id/transfer-vin — DataTransfer to request vehicle VIN from charger
+router.post('/:id/transfer-vin', requireConnected, async (req, res) => {
+  const { sendCommand } = require('../ocpp/commands/sendCommand');
+  try {
+    const result = await sendCommand(req.params.id, 'DataTransfer', {
+      vendorId: 'Primecom',
+      messageId: 'GetVIN',
+      data: '',
+    });
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

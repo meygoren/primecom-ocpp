@@ -177,23 +177,25 @@ export default function OcppConfig() {
               <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 16 }}>
                 Keys matching power / current / voltage — edit these to limit charging speed
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {powerKeys.map((item) => (
-                  <ConfigRow
-                    key={item.key}
-                    item={item}
-                    canEdit={canEdit}
-                    editingKey={editingKey}
-                    editValue={editValue}
-                    saving={saving}
-                    onEdit={(key, val) => { setEditingKey(key); setEditValue(val ?? ''); setSaveResult(null); }}
-                    onSave={saveKey}
-                    onCancel={() => setEditingKey(null)}
-                    onValueChange={setEditValue}
-                    highlight
-                  />
-                ))}
-              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <tbody>
+                  {powerKeys.map((item) => (
+                    <ConfigRow
+                      key={item.key}
+                      item={item}
+                      canEdit={canEdit}
+                      editingKey={editingKey}
+                      editValue={editValue}
+                      saving={saving}
+                      onEdit={(key, val) => { setEditingKey(key); setEditValue(val ?? ''); setSaveResult(null); }}
+                      onSave={saveKey}
+                      onCancel={() => setEditingKey(null)}
+                      onValueChange={setEditValue}
+                      highlight
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
