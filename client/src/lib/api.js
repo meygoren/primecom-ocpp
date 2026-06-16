@@ -114,6 +114,27 @@ export const api = {
   getIssueSettings: () => request('/api/issues/settings'),
   saveIssueSettings: (body) => request('/api/issues/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 
+  // Vehicle profiles
+  getVehicles: () => request('/api/vehicles'),
+  getVehicleSessions: (id) => request(`/api/vehicles/${id}/sessions`),
+  getMacSessions: (mac) => request(`/api/vehicles/mac/${encodeURIComponent(mac)}/sessions`),
+  createVehicle: (body) => request('/api/vehicles', { method: 'POST', body: JSON.stringify(body) }),
+  updateVehicle: (id, body) => request(`/api/vehicles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteVehicle: (id) => request(`/api/vehicles/${id}`, { method: 'DELETE' }),
+  downloadVehicleExport: async () => {
+    const { data: { session } } = await (await import('./supabase')).supabase.auth.getSession();
+    const token = session?.access_token;
+    const BASE = import.meta.env.VITE_API_URL || '';
+    const res = await fetch(`${BASE}/api/vehicles/export`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const filename = cd.match(/filename="(.+?)"/)?.[1] || 'vehicles.csv';
+    return { blob, filename };
+  },
+
   // EF Truck profiles
   getTruckProfiles: () => request('/api/charge-trucks/truck-profiles'),
   saveTruckProfile: (body) => request('/api/charge-trucks/truck-profiles', { method: 'POST', body: JSON.stringify(body) }),
