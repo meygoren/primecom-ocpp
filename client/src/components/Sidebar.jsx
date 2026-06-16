@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2 } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -18,6 +18,8 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
   { to: '/export',         icon: Download,            label: 'Export Data',    settingKey: null },
   { to: '/schedules',      icon: Calendar,            label: 'Schedules',      settingKey: null },
+  { to: '/fuel-log',       icon: Truck,               label: 'Fuel & Mileage', settingKey: null },
+  { to: '/expenses',       icon: Receipt,             label: 'Expenses',       settingKey: null },
   { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
 ];
 
@@ -37,6 +39,8 @@ const VIEWER_NAV = [
   { to: '/vehicles',       icon: Car,                 label: 'VINs',           settingKey: null },
   { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
   { to: '/export',         icon: Download,            label: 'Export Data',    settingKey: null },
+  { to: '/fuel-log',       icon: Truck,               label: 'Fuel & Mileage', settingKey: null },
+  { to: '/expenses',       icon: Receipt,             label: 'Expenses',       settingKey: null },
   { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
 ];
 
@@ -44,6 +48,7 @@ const DRIVER_NAV = [
   { to: '/',          icon: BatteryCharging, label: 'My Charger', settingKey: null },
   { to: '/schedules', icon: Calendar,        label: 'Schedules',  settingKey: null },
   { to: '/issues',    icon: AlertTriangle,   label: 'Issues',     settingKey: null, badge: true },
+  { to: '/expenses',  icon: Receipt,         label: 'Expenses',   settingKey: null },
 ];
 
 function getNavItems(role) {

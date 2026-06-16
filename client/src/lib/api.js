@@ -186,4 +186,24 @@ export const api = {
   getScheduleSettings: () => request('/api/schedules/settings'),
   updateScheduleSettings: (data) => request('/api/schedules/settings', { method: 'PATCH', body: JSON.stringify(data) }),
   sendScheduleNotification: (method) => request('/api/schedules/notify', { method: 'POST', body: JSON.stringify({ method }) }),
+
+  // Fuel & Mileage Log
+  getFuelVehicles: () => request('/api/fuel-log/vehicles'),
+  createFuelVehicle: (body) => request('/api/fuel-log/vehicles', { method: 'POST', body: JSON.stringify(body) }),
+  updateFuelVehicle: (id, body) => request(`/api/fuel-log/vehicles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  getTripLogs: (params = {}) => { const q = new URLSearchParams(params).toString(); return request(`/api/fuel-log/trips${q ? '?' + q : ''}`); },
+  createTripLog: (body) => request('/api/fuel-log/trips', { method: 'POST', body: JSON.stringify(body) }),
+  deleteTripLog: (id) => request(`/api/fuel-log/trips/${id}`, { method: 'DELETE' }),
+  getFuelStats: () => request('/api/fuel-log/stats'),
+  getFuelSettings: () => request('/api/fuel-log/settings'),
+  saveFuelSettings: (body) => request('/api/fuel-log/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // Expenses
+  getExpenses: (params = {}) => { const q = new URLSearchParams(params).toString(); return request(`/api/expenses${q ? '?' + q : ''}`); },
+  createExpense: (body) => request('/api/expenses', { method: 'POST', body: JSON.stringify(body) }),
+  updateExpense: (id, body) => request(`/api/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteExpense: (id) => request(`/api/expenses/${id}`, { method: 'DELETE' }),
+  getExpenseStats: () => request('/api/expenses/stats'),
+  getExpenseSettings: () => request('/api/expenses/settings'),
+  saveExpenseSettings: (body) => request('/api/expenses/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 };
