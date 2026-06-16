@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
@@ -14,6 +14,7 @@ const ADMIN_OPERATOR_NAV = [
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
   { to: '/billing',        icon: DollarSign,          label: 'Billing',        settingKey: null },
   { to: '/issues',         icon: AlertTriangle,       label: 'Issues',         settingKey: null, badge: true },
+  { to: '/vehicles',       icon: Car,                 label: 'VINs',           settingKey: null },
   { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
   { to: '/export',         icon: Download,            label: 'Export Data',    settingKey: null },
   { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
@@ -31,6 +32,7 @@ const VIEWER_NAV = [
   { to: '/energy-forward', icon: Warehouse,       label: 'Energy Forward', settingKey: null },
   { to: '/billing',        icon: DollarSign,          label: 'Billing',        settingKey: null },
   { to: '/issues',         icon: AlertTriangle,       label: 'Issues',         settingKey: null, badge: true },
+  { to: '/vehicles',       icon: Car,                 label: 'VINs',           settingKey: null },
   { to: '/ocpp-config',    icon: SlidersHorizontal,   label: 'OCPP Config',    settingKey: null },
   { to: '/export',         icon: Download,            label: 'Export Data',    settingKey: null },
   { to: '/settings',       icon: Settings,            label: 'Settings',       settingKey: null },
