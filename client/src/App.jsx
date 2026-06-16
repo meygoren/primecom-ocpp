@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
+import { FleetProvider } from './contexts/FleetContext';
+import FleetAssets from './pages/FleetAssets';
+import Customers from './pages/Customers';
+import Incidents from './pages/Incidents';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Dashboard from './pages/Dashboard';
@@ -70,6 +74,7 @@ export default function App() {
 
   return (
     <ProfileProvider session={session}>
+      <FleetProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
@@ -91,9 +96,13 @@ export default function App() {
           <Route path="/schedules" element={<PrivateRoute session={session}><Schedules /></PrivateRoute>} />
           <Route path="/fuel-log" element={<PrivateRoute session={session}><FuelLog /></PrivateRoute>} />
           <Route path="/expenses" element={<PrivateRoute session={session}><Expenses /></PrivateRoute>} />
+          <Route path="/fleet-assets" element={<PrivateRoute session={session}><FleetAssets /></PrivateRoute>} />
+          <Route path="/customers" element={<PrivateRoute session={session}><Customers /></PrivateRoute>} />
+          <Route path="/incidents" element={<PrivateRoute session={session}><Incidents /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </FleetProvider>
     </ProfileProvider>
   );
 }

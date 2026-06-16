@@ -206,4 +206,25 @@ export const api = {
   getExpenseStats: () => request('/api/expenses/stats'),
   getExpenseSettings: () => request('/api/expenses/settings'),
   saveExpenseSettings: (body) => request('/api/expenses/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // Fleet & Assets
+  getFleetVehicles: () => request('/api/fleet-assets/vehicles'),
+  updateFleetVehicle: (id, body) => request(`/api/fleet-assets/vehicles/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  getMaintenanceLogs: (params = {}) => { const q = new URLSearchParams(params).toString(); return request(`/api/fleet-assets/maintenance${q ? '?' + q : ''}`); },
+  createMaintenanceLog: (body) => request('/api/fleet-assets/maintenance', { method: 'POST', body: JSON.stringify(body) }),
+  updateMaintenanceLog: (id, body) => request(`/api/fleet-assets/maintenance/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteMaintenanceLog: (id) => request(`/api/fleet-assets/maintenance/${id}`, { method: 'DELETE' }),
+
+  // Customers
+  getCustomers: () => request('/api/customers'),
+  createCustomer: (body) => request('/api/customers', { method: 'POST', body: JSON.stringify(body) }),
+  updateCustomer: (id, body) => request(`/api/customers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteCustomer: (id) => request(`/api/customers/${id}`, { method: 'DELETE' }),
+
+  // Incidents
+  getIncidents: (params = {}) => { const q = new URLSearchParams(params).toString(); return request(`/api/incidents${q ? '?' + q : ''}`); },
+  getIncidentOpenCount: () => request('/api/incidents/open-count'),
+  createIncident: (body) => request('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
+  updateIncident: (id, body) => request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteIncident: (id) => request(`/api/incidents/${id}`, { method: 'DELETE' }),
 };
