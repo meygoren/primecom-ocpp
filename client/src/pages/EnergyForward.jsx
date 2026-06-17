@@ -542,11 +542,12 @@ function BayView({ label, charger1, charger2 }) {
   const emptyBay        = !anyActive;
   const showLastSession = !anyActive && (pLastSoc !== null || dLastSoc !== null);
 
-  // Server-blended prediction first; client physics estimate as fallback
-  const pEta  = charger1?.live?.eta_minutes ?? clientPhysicsEta(pSoc, pKw);
-  const dEta  = charger2?.live?.eta_minutes ?? clientPhysicsEta(dSoc, dKw);
-  const pConf = charger1?.live?.eta_minutes != null ? charger1.live.eta_confidence : (pEta != null ? 'low' : null);
-  const dConf = charger2?.live?.eta_minutes != null ? charger2.live.eta_confidence : (dEta != null ? 'low' : null);
+  // Always use client physics ETA: remaining kWh from SoC / current kW.
+  // Server predictor was removed — it produced unreliable estimates.
+  const pEta  = clientPhysicsEta(pSoc, pKw);
+  const dEta  = clientPhysicsEta(dSoc, dKw);
+  const pConf = pEta != null ? 'high' : null;
+  const dConf = dEta != null ? 'high' : null;
 
   // Truck label: either charger in this bay may carry it
   const truckLabel = charger1?.current_truck_label || charger2?.current_truck_label || null;
