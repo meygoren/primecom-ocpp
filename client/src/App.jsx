@@ -4,6 +4,7 @@ import { supabase } from './lib/supabase';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { FleetProvider } from './contexts/FleetContext';
 import FleetAssets from './pages/FleetAssets';
+import Legal from './pages/Legal';
 import Customers from './pages/Customers';
 import Incidents from './pages/Incidents';
 import Sidebar from './components/Sidebar';
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/fleet-assets" element={<PrivateRoute session={session}><FleetAssets /></PrivateRoute>} />
           <Route path="/customers" element={<PrivateRoute session={session}><Customers /></PrivateRoute>} />
           <Route path="/incidents" element={<PrivateRoute session={session}><Incidents /></PrivateRoute>} />
+          <Route path="/legal" element={<PrivateRoute session={session}><Legal /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
