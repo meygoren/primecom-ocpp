@@ -221,6 +221,19 @@ export const api = {
   updateCustomer: (id, body) => request(`/api/customers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCustomer: (id) => request(`/api/customers/${id}`, { method: 'DELETE' }),
 
+  // Legal
+  getLegalSettings: () => request('/api/legal/settings'),
+  saveLegalSettings: (body) => request('/api/legal/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  getLegalTemplates: () => request('/api/legal/templates'),
+  getLegalDocuments: () => request('/api/legal/documents'),
+  sendLegalDocument: (body) => request('/api/legal/send', { method: 'POST', body: JSON.stringify(body) }),
+  voidLegalDocument: (id, reason) => request(`/api/legal/documents/${id}/void`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
+  remindLegalDocument: (id) => request(`/api/legal/documents/${id}/remind`, { method: 'POST' }),
+  refreshLegalDocStatus: (id) => request(`/api/legal/documents/${id}/status`),
+  getLegalNotifications: () => request('/api/legal/notifications'),
+  createLegalNotification: (body) => request('/api/legal/notifications', { method: 'POST', body: JSON.stringify(body) }),
+  markLegalNotificationRead: (id) => request(`/api/legal/notifications/${id}/read`, { method: 'PATCH' }),
+
   // Incidents
   getIncidents: (params = {}) => { const q = new URLSearchParams(params).toString(); return request(`/api/incidents${q ? '?' + q : ''}`); },
   getIncidentOpenCount: () => request('/api/incidents/open-count'),

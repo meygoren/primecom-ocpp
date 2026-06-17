@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, ChevronDown, Wrench, UserSquare, ShieldAlert, MapPin } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, ChevronDown, Wrench, UserSquare, ShieldAlert, Scale, MapPin } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { useFleet, FLEETS } from '../contexts/FleetContext';
 import { supabase } from '../lib/supabase';
@@ -31,6 +31,11 @@ const ADMIN_OPERATOR_NAV = [
 const ADMIN_ONLY_NAV = [
   { to: '/accounts',   icon: Users,   label: 'Accounts',   settingKey: null },
   { to: '/employees',  icon: Users2,  label: 'Employees',  settingKey: null },
+  { to: '/legal',      icon: Scale,   label: 'Legal',      settingKey: null },
+];
+
+const LAWYER_NAV = [
+  { to: '/legal', icon: Scale, label: 'Legal', settingKey: null },
 ];
 
 const VIEWER_NAV = [
@@ -75,6 +80,7 @@ function getNavItems(role) {
   }
   if (role === 'viewer') return VIEWER_NAV;
   if (role === 'driver') return DRIVER_NAV;
+  if (role === 'lawyer') return LAWYER_NAV;
   return [];
 }
 
@@ -83,6 +89,7 @@ const ROLE_LABELS = {
   operator: { label: 'Operator', color: '#3b82f6' },
   viewer:   { label: 'Viewer',   color: '#f59e0b' },
   driver:   { label: 'Driver',   color: '#a855f7' },
+  lawyer:   { label: 'Legal',    color: '#06b6d4' },
 };
 
 function FleetSwitcher() {
