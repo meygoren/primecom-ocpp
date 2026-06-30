@@ -451,6 +451,7 @@ function ChargerUnit({ charger }) {
   const cableA     = live?.connectors?.[0];
   const cableB     = live?.connectors?.[1];
   const totalKw    = live?.power_kw != null ? live.power_kw.toFixed(1) : null;
+  const activeCableCount = [cableA, cableB].filter((c) => c?.active).length;
   const dotColor   = isCharging ? '#3b82f6' : isOnline ? '#47a141' : '#6b7280';
 
   return (
@@ -496,7 +497,7 @@ function ChargerUnit({ charger }) {
                 </div>
                 {active && totalKw !== null && (
                   <span style={{ fontSize: 11, fontWeight: 600, color: '#3b82f6' }}>
-                    {(parseFloat(totalKw) / 2).toFixed(0)} kW
+                    {(parseFloat(totalKw) / (activeCableCount || 1)).toFixed(0)} kW
                   </span>
                 )}
               </div>
@@ -981,10 +982,13 @@ function getDemoChargers(tick) {
     slot,
     ocpp_id: `DEMO-WH-0${slot}`,
     label,
+    current_truck_label: `DEMO-${slot}`,
     live: {
       status: 'charging',
+      is_active: true,
       power_kw: 308 + Math.sin(t + phase) * 8 + Math.cos(t * 1.6 + phase) * 4,
       soc: Math.min(98, Math.max(5, baseSoc + Math.sin(t * 0.12 + phase) * 4)),
+      session_kwh_charged: Math.max(0, tick * 1.4 + phase),
       connectors: [
         { connector_id: 1, active: true },
         { connector_id: 2, active: true },
