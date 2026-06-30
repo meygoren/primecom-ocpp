@@ -32,11 +32,13 @@ import Expenses from './pages/Expenses';
 import TruckMap from './pages/TruckMap';
 
 function Layout({ children }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar />
+      <Sidebar mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <TopBar />
+        <TopBar onMenuClick={() => setMobileNavOpen(true)} />
         <main style={{ flex: 1, overflowY: 'auto' }}>{children}</main>
       </div>
     </div>

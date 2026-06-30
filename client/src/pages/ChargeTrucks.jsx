@@ -116,14 +116,14 @@ function TruckCard({ truck }) {
 
   return (
     <div style={{ background: '#1a1d27', border: `1px solid ${borderColor}`, borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px', borderBottom: '1px solid #2e3347', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9' }}>{truck.label || `Truck ${truck.truck_number}`}</div>
+      <div style={{ padding: '14px 18px', borderBottom: '1px solid #2e3347', display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#f1f5f9', wordBreak: 'break-word' }}>{truck.label || `Truck ${truck.truck_number}`}</div>
           <div style={{ fontSize: 11, color: '#8892a4', marginTop: 2 }}>
             {truck.truck_type === 'compact' ? '4-cable · 2 boards' : '8-cable · 4 boards'} · 450 kWh
           </div>
         </div>
-        <span style={{ background: STATUS_BG[status], border: `1px solid ${STATUS_COLOR[status]}`, color: STATUS_COLOR[status], borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>
+        <span style={{ background: STATUS_BG[status], border: `1px solid ${STATUS_COLOR[status]}`, color: STATUS_COLOR[status], borderRadius: 999, padding: '3px 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', flexShrink: 0 }}>
           {status}
         </span>
       </div>
@@ -314,7 +314,7 @@ function SettingsTab({ trucks, onRefresh }) {
   return (
     <div>
       {/* Sub-tab selector */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid #2e3347', paddingBottom: 0 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 20, borderBottom: '1px solid #2e3347', paddingBottom: 0 }}>
         {[['trucks', 'Charge Trucks Config'], ['ef', 'Energy Forward Alerts']].map(([key, label]) => (
           <button
             key={key}
@@ -331,7 +331,7 @@ function SettingsTab({ trucks, onRefresh }) {
       </div>
 
       {settingsSubTab === 'ef' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, alignItems: 'start' }}>
           {/* Energy Forward alert settings */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: 24 }}>
@@ -437,11 +437,11 @@ function SettingsTab({ trucks, onRefresh }) {
                 return (
                   <div key={sup.id} style={{ borderBottom: '1px solid #2e3347' }}>
                     {/* Main row */}
-                    <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280' }}>{sup.name}</div>
+                    <div style={{ padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: sup.active ? '#f1f5f9' : '#6b7280', wordBreak: 'break-word' }}>{sup.name}</div>
                         {sup.phone && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.phone}</div>}
-                        {sup.email && <div style={{ fontSize: 11, color: '#8892a4' }}>{sup.email}</div>}
+                        {sup.email && <div style={{ fontSize: 11, color: '#8892a4', wordBreak: 'break-word' }}>{sup.email}</div>}
                         {summary && (
                           <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Clock size={10} /> {summary}
@@ -451,17 +451,17 @@ function SettingsTab({ trucks, onRefresh }) {
                           <div style={{ fontSize: 10, color: '#6b7280', marginTop: 3 }}>All days, all hours</div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <button
                           onClick={() => isEditingSched ? setScheduleEditing(null) : openSchedule(sup)}
-                          style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${isEditingSched ? '#3b82f6' : '#2e3347'}`, background: isEditingSched ? '#1a2540' : 'none', color: isEditingSched ? '#3b82f6' : '#8892a4', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+                          style={{ fontSize: 10, padding: '7px 10px', borderRadius: 5, border: `1px solid ${isEditingSched ? '#3b82f6' : '#2e3347'}`, background: isEditingSched ? '#1a2540' : 'none', color: isEditingSched ? '#3b82f6' : '#8892a4', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                         >
                           <Clock size={10} /> Schedule
                         </button>
-                        <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
+                        <button onClick={() => toggleActive(sup)} style={{ fontSize: 10, padding: '7px 10px', borderRadius: 5, border: `1px solid ${sup.active ? '#47a141' : '#6b7280'}`, background: 'none', color: sup.active ? '#47a141' : '#6b7280', cursor: 'pointer', fontWeight: 600 }}>
                           {sup.active ? 'Active' : 'Off'}
                         </button>
-                        <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                        <button onClick={() => removeSupervisor(sup.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8 }}>
                           <Trash2 size={13} color="#ef4444" />
                         </button>
                       </div>
@@ -477,7 +477,7 @@ function SettingsTab({ trucks, onRefresh }) {
                         {/* Day toggles */}
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6 }}>Active days (none = every day)</div>
-                          <div style={{ display: 'flex', gap: 5 }}>
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                             {DAY_LABELS.map((label, idx) => {
                               const active = scheduleForm.days.includes(idx);
                               return (
@@ -496,41 +496,41 @@ function SettingsTab({ trucks, onRefresh }) {
                         {/* Time range */}
                         <div style={{ marginBottom: 12 }}>
                           <div style={{ fontSize: 10, color: '#8892a4', marginBottom: 6 }}>Time window — UTC (leave blank for all hours)</div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input
                               type="time"
                               value={scheduleForm.start}
                               onChange={(e) => setScheduleForm((f) => ({ ...f, start: e.target.value }))}
-                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
+                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '8px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
                             />
                             <span style={{ fontSize: 11, color: '#6b7280' }}>to</span>
                             <input
                               type="time"
                               value={scheduleForm.end}
                               onChange={(e) => setScheduleForm((f) => ({ ...f, end: e.target.value }))}
-                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
+                              style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '8px 10px', color: '#f1f5f9', fontSize: 12, outline: 'none' }}
                             />
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <button
                             onClick={() => saveSchedule(sup.id)}
                             disabled={savingSchedule}
-                            style={{ background: '#47a141', border: 'none', borderRadius: 6, padding: '6px 14px', color: '#fff', fontSize: 11, fontWeight: 700, cursor: savingSchedule ? 'not-allowed' : 'pointer' }}
+                            style={{ background: '#47a141', border: 'none', borderRadius: 6, padding: '8px 14px', color: '#fff', fontSize: 11, fontWeight: 700, cursor: savingSchedule ? 'not-allowed' : 'pointer' }}
                           >
                             {savingSchedule ? 'Saving...' : 'Save Schedule'}
                           </button>
                           <button
                             onClick={() => clearSchedule(sup.id)}
                             disabled={savingSchedule}
-                            style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 14px', color: '#8892a4', fontSize: 11, cursor: 'pointer' }}
+                            style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 6, padding: '8px 14px', color: '#8892a4', fontSize: 11, cursor: 'pointer' }}
                           >
                             Clear (always send)
                           </button>
                           <button
                             onClick={() => setScheduleEditing(null)}
-                            style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 11, cursor: 'pointer', marginLeft: 'auto' }}
+                            style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 11, cursor: 'pointer', marginLeft: 'auto', padding: '8px 4px' }}
                           >
                             Cancel
                           </button>
@@ -553,10 +553,10 @@ function SettingsTab({ trucks, onRefresh }) {
             <div key={truck.id} style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 10, overflow: 'hidden' }}>
               <div
                 onClick={() => expanded === truck.id ? setExpanded(null) : openTruck(truck)}
-                style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                style={{ padding: '14px 18px', display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 14 }}>{truck.label || `Truck ${truck.truck_number}`}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: 14, wordBreak: 'break-word' }}>{truck.label || `Truck ${truck.truck_number}`}</span>
                   <span style={{ fontSize: 10, color: '#8892a4', background: '#22263a', borderRadius: 4, padding: '2px 7px' }}>{truck.truck_type === 'compact' ? '4-cable' : '8-cable'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -567,7 +567,7 @@ function SettingsTab({ trucks, onRefresh }) {
 
               {expanded === truck.id && (
                 <div style={{ padding: '0 18px 18px', borderTop: '1px solid #2e3347' }}>
-                  <div style={{ paddingTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                  <div style={{ paddingTop: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
                     <div>
                       <label style={lbl}>Label</label>
                       <input style={inp} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder={`Truck ${truck.truck_number}`} />
@@ -585,7 +585,7 @@ function SettingsTab({ trucks, onRefresh }) {
                         <div style={{ fontSize: 11, color: '#8892a4', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
                           {side === 'passenger' ? 'Passenger' : 'Driver'} Side OCPP IDs
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: truck.truck_type === 'compact' ? '1fr' : '1fr 1fr', gap: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: truck.truck_type === 'compact' ? '1fr' : 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
                           <div>
                             <label style={lbl}>Board 1 (Cables A &amp; B)</label>
                             <input style={inp} value={form[`${pfx}_ocpp_1`]} onChange={(e) => setForm({ ...form, [`${pfx}_ocpp_1`]: e.target.value })} placeholder="e.g. T1P-BOARD1" />
@@ -718,10 +718,10 @@ export default function ChargeTrucks() {
   const totalCharging = displayTrucks.filter((t) => truckStatus(t.live) === 'charging').length;
   const totalKw       = displayTrucks.reduce((sum, t) => sum + sidePower(t.live, 'passenger') + sidePower(t.live, 'driver'), 0);
 
-  if (loading && !testMode) return <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading fleet data...</div>;
+  if (loading && !testMode) return <div className="px-4 py-5 md:px-9 md:py-8" style={{ color: '#8892a4' }}>Loading fleet data...</div>;
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 1280 }}>
+    <div className="px-4 py-5 md:px-9 md:py-8" style={{ maxWidth: 1280 }}>
       {/* Test mode banner */}
       {testMode && (
         <div style={{ background: '#2a1f00', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -731,14 +731,14 @@ export default function ChargeTrucks() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-        <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
+        <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Truck size={20} color="#47a141" /> Charge Trucks
           </h1>
           <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Mobile energy fleet · refreshes every 30 s</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {!testMode && lastUpdated && <span style={{ fontSize: 11, color: '#8892a4' }}>Updated {lastUpdated.toLocaleTimeString()}</span>}
           {/* Test mode toggle */}
           <button
@@ -755,7 +755,7 @@ export default function ChargeTrucks() {
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14, marginBottom: 24 }}>
         {[
           { label: 'Total Trucks',   value: displayTrucks.length,  color: '#f1f5f9' },
           { label: 'Online',         value: totalOnline,    color: '#47a141' },
@@ -770,7 +770,7 @@ export default function ChargeTrucks() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #2e3347', marginBottom: 24 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, borderBottom: '1px solid #2e3347', marginBottom: 24 }}>
         {[['fleet', 'Fleet Overview'], ...(isAdmin ? [['settings', 'Settings & OCPP Config']] : [])].map(([key, lbl]) => (
           <button
             key={key}
@@ -787,7 +787,7 @@ export default function ChargeTrucks() {
       )}
 
       {tab === 'fleet' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(560px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(560px, 100%), 1fr))', gap: 16 }}>
           {displayTrucks.map((truck) => <TruckCard key={truck.id} truck={truck} />)}
           {displayTrucks.length === 0 && (
             <div style={{ gridColumn: '1/-1', padding: 60, textAlign: 'center', color: '#8892a4', background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12 }}>

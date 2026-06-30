@@ -82,7 +82,7 @@ export default function DriverDashboard() {
   };
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 700 }}>
+    <div className="px-4 py-6 md:px-9 md:py-8" style={{ maxWidth: 700 }}>
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>My Charger</h1>
         <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Refreshes every 30 seconds</div>
@@ -95,8 +95,8 @@ export default function DriverDashboard() {
         </div>
       ) : (
         <>
-          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: 24, marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: '#f1f5f9' }}>{charger.charger_id}</div>
                 {charger.location_label && (
@@ -150,7 +150,7 @@ export default function DriverDashboard() {
             {session && (
               <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #2e3347' }}>
                 <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 600 }}>Active Session</div>
-                <div style={{ display: 'flex', gap: 24 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
                   <div>
                     <div style={{ fontSize: 11, color: '#8892a4' }}>Transaction ID</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{session.transaction_id}</div>
@@ -209,11 +209,11 @@ export default function DriverDashboard() {
                       gap: 12,
                     }}
                   >
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       {!n.read && (
                         <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#47a141', marginRight: 8, verticalAlign: 'middle', marginTop: -2 }} />
                       )}
-                      <span style={{ fontSize: 13, color: '#f1f5f9' }}>{n.message}</span>
+                      <span style={{ fontSize: 13, color: '#f1f5f9', wordBreak: 'break-word' }}>{n.message}</span>
                       <div style={{ fontSize: 11, color: '#8892a4', marginTop: 3 }}>
                         {new Date(n.created_at).toLocaleString()}
                       </div>
@@ -221,7 +221,7 @@ export default function DriverDashboard() {
                     {!n.read && (
                       <button
                         onClick={() => markRead(n.id)}
-                        style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 5, padding: '3px 8px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ background: 'none', border: '1px solid #2e3347', borderRadius: 5, padding: '6px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                       >
                         Dismiss
                       </button>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { Menu } from 'lucide-react';
 import { api } from '../lib/api';
 
-export default function TopBar() {
+export default function TopBar({ onMenuClick }) {
   const [open,     setOpen]     = useState(false);
   const [issues,   setIssues]   = useState([]);
   const [count,    setCount]    = useState(0);
@@ -57,10 +58,29 @@ export default function TopBar() {
       borderBottom: '1px solid #2e3347',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'flex-end',
-      padding: '0 28px',
+      justifyContent: 'space-between',
+      padding: '0 12px 0 12px',
       flexShrink: 0,
     }}>
+      <button
+        onClick={onMenuClick}
+        className="flex md:hidden"
+        style={{
+          background: 'none',
+          border: '1px solid #2e3347',
+          borderRadius: 8,
+          width: 36,
+          height: 36,
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#8892a4',
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        <Menu size={17} />
+      </button>
+      <div className="hidden md:block" style={{ flex: 1 }} />
       <div ref={panelRef} style={{ position: 'relative' }}>
         {/* Bell button */}
         <button

@@ -154,7 +154,7 @@ function NewIssueModal({ trucks, onClose, onCreated, reporterName }) {
 
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Truck + side + cable row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 10 }}>
             <div>
               {fieldLabel('Truck')}
               {select('truck_number', trucks.map((t) => ({ value: String(t.truck_number), label: `Truck ${t.truck_number}${t.label ? ` — ${t.label}` : ''}` })), 'No truck / general')}
@@ -326,9 +326,9 @@ function IssueDetail({ issue, onClose, onUpdated, isAdmin }) {
   }
 
   const row = (label, value) => value ? (
-    <div style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
+    <div style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 11, color: C.muted, width: 100, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '.06em', paddingTop: 1 }}>{label}</span>
-      <span style={{ fontSize: 13, color: C.text }}>{value}</span>
+      <span style={{ fontSize: 13, color: C.text, wordBreak: 'break-word', minWidth: 0, flex: 1 }}>{value}</span>
     </div>
   ) : null;
 
@@ -336,8 +336,8 @@ function IssueDetail({ issue, onClose, onUpdated, isAdmin }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6, wordBreak: 'break-word' }}>
               {issue.title || `${CATEGORIES.find((c) => c.value === issue.category)?.label || 'Issue'}`}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -501,8 +501,8 @@ function IssueSettingsPanel({ onClose }) {
   );
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '24px 28px', marginTop: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+    <div className="px-4 py-5 md:px-7 md:py-6" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginTop: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Issue Alert Settings</div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.muted, cursor: 'pointer', fontSize: 14 }}>Hide</button>
       </div>
@@ -563,14 +563,14 @@ export default function Issues() {
   const highCount  = issues.filter((i) => i.priority === 'high' && i.status !== 'resolved' && i.status !== 'closed').length;
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 1100 }}>
+    <div className="px-4 py-5 md:px-9 md:py-8" style={{ maxWidth: 1100 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>Issues</h1>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Driver and field issue tracker</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {isAdmin && (
             <button
               onClick={() => setShowSettings((s) => !s)}
@@ -589,7 +589,7 @@ export default function Issues() {
       </div>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 14, marginBottom: 24 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
           <div style={{ fontSize: 11, color: C.muted, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Open Issues</div>
           <div style={{ fontSize: 32, fontWeight: 800, color: openCount > 0 ? C.amber : C.green }}>{openCount}</div>
@@ -662,6 +662,7 @@ export default function Issues() {
                 display: 'flex',
                 gap: 14,
                 alignItems: 'flex-start',
+                flexWrap: 'wrap',
                 transition: 'border-color 0.15s',
               }}
             >
@@ -670,13 +671,13 @@ export default function Issues() {
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>
                     {issue.title || CATEGORIES.find((c) => c.value === issue.category)?.label || 'Issue'}
                   </span>
                   <PriorityBadge priority={issue.priority} />
                   <StatusBadge status={issue.status} />
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, wordBreak: 'break-word' }}>
                   {[
                     issue.truck_number ? `Truck ${issue.truck_number}` : null,
                     issue.truck_side,

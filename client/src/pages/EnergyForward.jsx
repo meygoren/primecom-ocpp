@@ -554,7 +554,8 @@ function BayView({ label, charger1, charger2 }) {
 
   return (
     <div style={{
-      flex: 1,
+      flex: '1 1 320px',
+      minWidth: 0,
       background: '#1a1d27',
       border: '1px solid #2e3347',
       borderRadius: 14,
@@ -566,6 +567,8 @@ function BayView({ label, charger1, charger2 }) {
         borderBottom: '1px solid #2e3347',
         padding: '12px 18px',
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
@@ -579,7 +582,7 @@ function BayView({ label, charger1, charger2 }) {
 
       <div style={{ padding: 16 }}>
         {/* Charger row */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 0 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 0 }}>
           <ChargerUnit charger={charger1} />
           <ChargerUnit charger={charger2} />
         </div>
@@ -587,7 +590,10 @@ function BayView({ label, charger1, charger2 }) {
         {/* Cable lines from chargers down to truck */}
         <CableSVG leftActive={leftActive} rightActive={rightActive} />
 
-        {/* Top-down truck */}
+        {/* Top-down truck — horizontal scroll wrapper since the diagram has a fixed
+            minimum width that can exceed narrow phone viewports */}
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ minWidth: 360 }}>
         <TruckTopDown
           pSoc={pSoc} dSoc={dSoc}
           pCharging={pCharging} dCharging={dCharging}
@@ -599,6 +605,8 @@ function BayView({ label, charger1, charger2 }) {
           pSessionKwh={pSessionKwh}
           dSessionKwh={dSessionKwh}
         />
+        </div>
+        </div>
 
         {/* Last session info — shown when idle but SoC data is available */}
         {showLastSession && (
@@ -606,7 +614,7 @@ function BayView({ label, charger1, charger2 }) {
             <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.06em' }}>
               Last Session
             </div>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
               {pLastSoc !== null && (
                 <span style={{ fontSize: 12, color: '#8892a4' }}>
                   P-Side: <span style={{ color: socColor(pLastSoc), fontWeight: 700 }}>{Math.round(pLastSoc)}%</span>
@@ -767,22 +775,22 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
           <div style={sectionHdr}>Bay Assignment</div>
           <div style={sectionSub}>Select which truck is currently in each bay. Updates the truck number displayed on screen.</div>
         </div>
-        <div style={{ padding: 20, display: 'flex', gap: 20 }}>
+        <div style={{ padding: 20, display: 'flex', flexWrap: 'wrap', gap: 20 }}>
           {[{ bay: 'A', value: bayA, setter: setBayA, slots: bayASlots },
             { bay: 'B', value: bayB, setter: setBayB, slots: bayBSlots }].map(({ bay, value, setter, slots }) => {
             const charger1 = slots[0];
             const charger2 = slots[1];
             const ocppIds = [charger1?.ocpp_id, charger2?.ocpp_id].filter(Boolean);
             return (
-              <div key={bay} style={{ flex: 1, background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
+              <div key={bay} style={{ flex: '1 1 240px', minWidth: 0, background: '#22263a', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 16px' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>Bay {bay}</div>
                 <div style={{ marginBottom: 10 }}>
                   <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>Truck in Bay</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     <select
                       value={value}
                       onChange={(e) => setter(e.target.value)}
-                      style={{ ...inp, flex: 1 }}
+                      style={{ ...inp, flex: 1, minWidth: 120 }}
                     >
                       <option value="">— Empty bay —</option>
                       {truckOptions.map((o) => (
@@ -792,7 +800,7 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
                     <button
                       onClick={() => assignBayTruck(bay, value)}
                       disabled={bayAssigning === bay}
-                      style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '7px 14px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      style={{ background: '#47a141', border: 'none', borderRadius: 7, padding: '8px 14px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       {bayAssigning === bay ? 'Saving...' : 'Set'}
                     </button>
@@ -805,12 +813,12 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
                   const key = `${bay}-${i}`;
                   return (
                     <div key={ocppId} style={{ marginBottom: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, color: '#6b7280', flex: 1, fontFamily: 'monospace' }}>{ocppId}</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, color: '#6b7280', flex: 1, minWidth: 0, wordBreak: 'break-word', fontFamily: 'monospace' }}>{ocppId}</span>
                         <button
                           onClick={() => transferVin(ocppId, key)}
                           disabled={vinLoading[key]}
-                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '4px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                          style={{ background: '#22263a', border: '1px solid #2e3347', borderRadius: 6, padding: '8px 10px', color: '#8892a4', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
                         >
                           {vinLoading[key] ? 'Sending...' : 'Transfer VIN'}
                         </button>
@@ -857,7 +865,7 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
                 <button
                   onClick={() => saveTruckProfile(n)}
                   disabled={truckSaving === n}
-                  style={{ background: truckSaved === n ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '7px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: truckSaving === n ? 'wait' : 'pointer', width: '100%' }}
+                  style={{ background: truckSaved === n ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '9px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: truckSaving === n ? 'wait' : 'pointer', width: '100%' }}
                 >
                   {truckSaving === n ? 'Saving...' : truckSaved === n ? 'Saved' : 'Save'}
                 </button>
@@ -886,7 +894,7 @@ function WarehouseSettingsPanel({ chargers, truckProfiles, onSaved }) {
                   <label style={{ fontSize: 10, color: '#8892a4', display: 'block', marginBottom: 4 }}>OCPP ID</label>
                   <input style={inp} value={forms[c.id]?.ocpp_id || ''} onChange={(e) => setSlotField(c.id, 'ocpp_id', e.target.value)} placeholder="e.g. WH-CHARGER-01" />
                 </div>
-                <button onClick={() => saveSlot(c)} disabled={saving === c.id} style={{ background: saved === c.id ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '7px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving === c.id ? 'wait' : 'pointer', width: '100%' }}>
+                <button onClick={() => saveSlot(c)} disabled={saving === c.id} style={{ background: saved === c.id ? '#2d5c2a' : '#47a141', border: 'none', borderRadius: 7, padding: '9px 16px', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving === c.id ? 'wait' : 'pointer', width: '100%' }}>
                   {saving === c.id ? 'Saving...' : saved === c.id ? 'Saved' : 'Save'}
                 </button>
               </div>
@@ -929,8 +937,8 @@ function DriverView({ chargers }) {
     }
 
     return (
-      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden', flex: 1 }}>
-        <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, overflow: 'hidden', flex: '1 1 260px', minWidth: 0 }}>
+        <div style={{ background: '#22263a', borderBottom: '1px solid #2e3347', padding: '12px 18px', display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>{label}</span>
           {totalKw > 0 && <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 600 }}>{totalKw.toFixed(0)} kW total</span>}
         </div>
@@ -944,12 +952,12 @@ function DriverView({ chargers }) {
   }
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 900 }}>
+    <div className="px-4 py-5 md:px-9 md:py-8" style={{ maxWidth: 900 }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>Energy Forward</h1>
         <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Warehouse charging status</div>
       </div>
-      <div style={{ display: 'flex', gap: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
         <BayStrip label="Bay A" charger1={bayA[0]} charger2={bayA[1]} />
         <BayStrip label="Bay B" charger1={bayB[0]} charger2={bayB[1]} />
       </div>
@@ -1031,7 +1039,7 @@ export default function EnergyForward() {
 
   if (isDriver) {
     return loading ? (
-      <div style={{ padding: '32px 36px', color: '#8892a4' }}>Loading...</div>
+      <div className="px-4 py-5 md:px-9 md:py-8" style={{ color: '#8892a4' }}>Loading...</div>
     ) : (
       <DriverView chargers={chargers} />
     );
@@ -1050,7 +1058,7 @@ export default function EnergyForward() {
   const totalKw        = displayChargers.reduce((sum, c) => sum + (c.live?.power_kw || 0), 0);
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 1280 }}>
+    <div className="px-4 py-5 md:px-9 md:py-8" style={{ maxWidth: 1280 }}>
       {/* Inject animation keyframes */}
       <style>{ANIM_STYLES}</style>
 
@@ -1063,14 +1071,14 @@ export default function EnergyForward() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
-        <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+        <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>Energy Forward</h1>
           <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>
             Energy Forward LLC · Recharging bay · refreshes every 30 s
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Test mode toggle */}
           <button
             onClick={() => { setTestMode((m) => !m); setDemoTick(0); }}
@@ -1112,7 +1120,7 @@ export default function EnergyForward() {
       {!loading && !error && (
         <>
           {/* Stats row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14, marginBottom: 28 }}>
             <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 12, padding: '18px 22px' }}>
               <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 6 }}>Warehouse Chargers</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9' }}>{chargers.length}</div>
@@ -1128,9 +1136,8 @@ export default function EnergyForward() {
           </div>
 
           {/* Warehouse visualization */}
-          <div style={{ display: 'flex', gap: 20 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
             <BayView label="Bay A" charger1={charger1} charger2={charger2} />
-            <div style={{ width: 1, background: '#2e3347', margin: '0 4px', flexShrink: 0 }} />
             <BayView label="Bay B" charger1={charger3} charger2={charger4} />
           </div>
 

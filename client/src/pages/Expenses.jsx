@@ -93,13 +93,13 @@ function ExpenseForm({ requireReceiptOver, defaultName, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '22px 24px', marginBottom: 24 }}>
+    <div className="px-4 py-5 md:px-6 md:py-5" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Add Expense</div>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14, marginBottom: 14 }}>
         <div>
           <div style={labelStyle}>Date <span style={{ color: C.red }}>*</span></div>
           <input type="date" value={form.date} onChange={(e) => setField('date', e.target.value)} style={inputStyle} />
@@ -115,7 +115,7 @@ function ExpenseForm({ requireReceiptOver, defaultName, onClose, onSaved }) {
         <input value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="What was this for?" style={inputStyle} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 14, marginBottom: 14 }}>
         <div>
           <div style={labelStyle}>Category <span style={{ color: C.red }}>*</span></div>
           <select value={form.category} onChange={(e) => setField('category', e.target.value)} style={inputStyle}>
@@ -239,13 +239,13 @@ function SettingsSection({ settings, onSaved }) {
         <span style={{ color: C.muted, fontSize: 13 }}>{open ? 'Hide' : 'Show'}</span>
       </button>
       {open && (
-        <div style={{ padding: '0 22px 22px' }}>
+        <div className="px-4 pb-5 md:px-6 md:pb-6">
           <div style={{ marginBottom: 14, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
             <div style={labelStyle}>Accounting notification emails (one per line)</div>
             <textarea value={form.accounting_emails_raw} onChange={(e) => setForm({ ...form, accounting_emails_raw: e.target.value })} rows={3}
               placeholder="accounting@company.com" style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <span style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>Auto-notify accounting on new expense</span>
             <button onClick={() => setForm({ ...form, auto_notify_accounting: !form.auto_notify_accounting })}
               style={{ width: 40, height: 22, borderRadius: 999, border: 'none', background: form.auto_notify_accounting ? C.green : C.border, position: 'relative', cursor: 'pointer' }}>
@@ -364,14 +364,14 @@ export default function Expenses() {
   const requireReceiptOver = settings?.require_receipt_over ?? 25;
 
   return (
-    <div style={{ padding: '32px 36px', maxWidth: 1200 }}>
+    <div className="px-4 py-5 md:px-9 md:py-8" style={{ maxWidth: 1200 }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>Expenses</h1>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>Submit and track expense reports</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={toggleTestMode} disabled={generating}
             style={{ padding: '8px 16px', background: testMode ? '#a855f722' : C.panel, border: `1px solid ${testMode ? C.purple : C.border}`, borderRadius: 8, color: testMode ? C.purple : C.muted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             {generating ? 'Generating…' : 'Test Mode'}
@@ -385,14 +385,14 @@ export default function Expenses() {
 
       {/* New pending banner */}
       {isAdmin && newPending > 0 && (
-        <div style={{ background: '#f59e0b14', border: `1px solid ${C.amber}44`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: '#f59e0b14', border: `1px solid ${C.amber}44`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 13, color: C.amber, fontWeight: 600 }}>{newPending} new expense{newPending > 1 ? 's' : ''} pending review</span>
           <button onClick={() => setNewPending(0)} style={{ background: 'none', border: 'none', color: C.muted, fontSize: 16, cursor: 'pointer' }}>×</button>
         </div>
       )}
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 14, marginBottom: 24 }}>
         <StatCard label="Pending Expenses" value={stats?.pending_count ?? '—'} accent={stats?.pending_count > 0 ? C.amber : C.green} />
         <StatCard label="Approved This Month" value={stats ? money(stats.approved_total_month) : '—'} accent={C.green} />
         <StatCard label="My Submissions (Month)" value={stats?.my_submissions_month ?? '—'} accent={C.blue} />
@@ -418,7 +418,7 @@ export default function Expenses() {
         </div>
       ) : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ color: C.muted, textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', background: C.panel }}>
@@ -452,10 +452,10 @@ export default function Expenses() {
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         {isAdmin && x.status === 'pending' && (
-                          <button onClick={() => setReviewing(x)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 6, color: C.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: '4px 10px', marginRight: 6 }}>Review</button>
+                          <button onClick={() => setReviewing(x)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 6, color: C.green, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: '6px 12px', marginRight: 6 }}>Review</button>
                         )}
                         {(isMine || isAdmin) && x.status === 'pending' && (
-                          <button onClick={() => del(x.id)} style={{ background: 'none', border: 'none', color: C.red, fontSize: 12, cursor: 'pointer' }}>Delete</button>
+                          <button onClick={() => del(x.id)} style={{ background: 'none', border: 'none', color: C.red, fontSize: 12, cursor: 'pointer', padding: '6px 4px' }}>Delete</button>
                         )}
                       </td>
                     </tr>
