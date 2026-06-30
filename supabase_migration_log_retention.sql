@@ -1,13 +1,26 @@
 -- Log Retention Migration: tiered cleanup for ocpp_logs / meter_values
 -- Run this in your Supabase SQL editor.
 --
--- IMPORTANT: this file is two separate parts. Run Part 1 first (paste and run it on
--- its own), confirm it succeeds, then run Part 2 separately. Pasting both parts
--- together in one query will fail — the SQL editor sends a multi-statement paste to
--- Postgres as a single implicit transaction, and VACUUM cannot run inside any
--- transaction. If you accidentally run both together and hit that error, Part 1's
--- statements were rolled back too (not just VACUUM) — go back and run Part 1 alone
--- first to confirm it actually committed.
+-- IMPORTANT: the Supabase Studio SQL editor always executes queries inside its own
+-- wrapped transaction, and VACUUM can never run inside any transaction — so VACUUM
+-- cannot be run from this editor at all, no matter how you split the statements.
+-- That's fine: you don't need to run it manually. The DELETEs below are the
+-- substantive cleanup; Postgres's autovacuum (enabled by default on every Supabase
+-- project) reclaims the freed disk space on its own shortly after a bulk delete like
+-- this, typically within a few minutes, with zero action required. The "Database
+-- Size" number on the Usage page reflects that after its own refresh delay (up to an
+-- hour, per Supabase's note on that page).
+--
+-- To confirm autovacuum has caught up, run (this is a plain read, not blocked by the
+-- transaction-wrapping issue above):
+--   select relname, n_dead_tup, last_autovacuum
+--   from pg_stat_user_tables
+--   where relname in ('ocpp_logs', 'meter_values');
+--
+-- If you ever need to force a VACUUM immediately (e.g. for a much larger one-time
+-- cleanup), the only reliable way is connecting with a direct Postgres client (psql,
+-- TablePlus, DBeaver) using the connection string from Project Settings → Database,
+-- rather than the web SQL editor.
 --
 -- Retention policy:
 --   - ocpp_logs, action = 'Heartbeat'    -> 7 days  (pure liveness pings, no billing/audit value)
@@ -24,10 +37,6 @@
 --
 -- Runs automatically every night at 03:00 UTC via pg_cron, so this doesn't depend on the
 -- Node server being up.
-
--- ═════════════════════════════════════════════
--- PART 1 — run this block on its own first
--- ═════════════════════════════════════════════
 
 -- 1. Make sure pg_cron is available
 --    (If this errors with a permissions message, enable it instead via
@@ -64,15 +73,7 @@ select cron.schedule(
   $$select cleanup_ocpp_data();$$
 );
 
--- 4. Run it once now to reclaim space immediately, instead of waiting for tonight's run
+-- 4. Run it once now to reclaim space immediately, instead of waiting for tonight's run.
+--    Disk space is reclaimed automatically afterward by autovacuum — see the note at
+--    the top of this file. No further manual step is needed.
 select cleanup_ocpp_data();
-
--- ═════════════════════════════════════════════
--- PART 2 — after Part 1 succeeds, clear the editor and run this block separately
--- ═════════════════════════════════════════════
-
--- 5. Reclaim disk space on disk.
---    A DELETE only marks rows as dead — it doesn't shrink the table file by itself.
---    This is what makes the "Database Size" usage number actually drop.
-vacuum (verbose, analyze) ocpp_logs;
-vacuum (verbose, analyze) meter_values;
