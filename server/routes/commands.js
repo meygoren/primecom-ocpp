@@ -10,6 +10,7 @@ const changeConfiguration = require('../ocpp/commands/changeConfiguration');
 const getDiagnostics = require('../ocpp/commands/getDiagnostics');
 const unlockConnector = require('../ocpp/commands/unlockConnector');
 const clearCache = require('../ocpp/commands/clearCache');
+const setChargingProfile = require('../ocpp/commands/setChargingProfile');
 
 function requireConnected(req, res, next) {
   const { id } = req.params;
@@ -123,6 +124,22 @@ router.post('/:id/unlock-connector', requireConnected, async (req, res) => {
 router.post('/:id/clear-cache', requireConnected, async (req, res) => {
   try {
     const result = await clearCache(req.params.id);
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/set-charging-profile — cap output power in kW,
+// total (connectorId 0) or per connector
+router.post('/:id/set-charging-profile', requireConnected, async (req, res) => {
+  const { connectorId = 0, limitKw } = req.body;
+  const kw = parseFloat(limitKw);
+  if (!limitKw || isNaN(kw) || kw <= 0) {
+    return res.status(400).json({ error: 'limitKw is required and must be a positive number' });
+  }
+  try {
+    const result = await setChargingProfile(req.params.id, parseInt(connectorId), Math.round(kw * 1000));
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
