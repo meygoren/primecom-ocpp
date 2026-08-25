@@ -52,10 +52,19 @@ const ALL_COMMANDS = [
   {
     key: 'set-charging-profile',
     label: 'Set Power Limit',
-    description: 'Cap output power in kW — total output or a single connector',
+    description: 'Cap output power — total output or a single connector',
     fields: [
       { name: 'connectorId', label: 'Scope', default: '0', type: 'pill', dynamicOptions: 'connectors' },
-      { name: 'limitKw', label: 'Power Limit (kW)', default: '', type: 'number', step: '0.1', parse: 'float' },
+      { name: 'limitKw', label: 'Power Limit (kW) — Smart Charging', default: '', type: 'number', step: '0.1', parse: 'float' },
+      {
+        name: 'limitAmps',
+        label: 'Max Current (A) — writes charger config, Total only',
+        default: '',
+        type: 'number',
+        step: '1',
+        parse: 'float',
+        showIf: (v) => (v.connectorId ?? '0') === '0',
+      },
     ],
     settingKey: null,
   },
@@ -148,10 +157,12 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
     try {
       const body = {};
       active.fields.forEach((f) => {
+        if (f.showIf && !f.showIf(values)) return;
+        const raw = values[f.name];
         if (f.type === 'text') {
-          body[f.name] = values[f.name];
-        } else {
-          body[f.name] = f.parse === 'float' ? parseFloat(values[f.name]) : parseInt(values[f.name]);
+          body[f.name] = raw;
+        } else if (raw !== '' && raw != null) {
+          body[f.name] = f.parse === 'float' ? parseFloat(raw) : parseInt(raw);
         }
       });
       const data = await api.sendCommand(chargerId, active.key, body);
@@ -243,7 +254,7 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
             </div>
           )}
 
-          {active.fields.map((f) => (
+          {active.fields.filter((f) => !f.showIf || f.showIf(values)).map((f) => (
             <div key={f.name} style={{ marginBottom: 10 }}>
               <label style={{ fontSize: 12, color: '#8892a4', display: 'block', marginBottom: 4 }}>
                 {f.label}
