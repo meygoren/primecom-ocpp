@@ -131,16 +131,39 @@ router.post('/:id/clear-cache', requireConnected, async (req, res) => {
   }
 });
 
-// POST /api/commands/:id/set-charging-profile — cap output power in kW,
-// total (connectorId 0) or per connector
+// POST /api/commands/:id/set-charging-profile — cap output power, total
+// (connectorId 0) or per connector. limitKw sends a Smart Charging
+// SetChargingProfile call. limitAmps (Total scope only — the charger has
+// no per-connector equivalent) writes ChargePointMaxCurrentLimit via
+// ChangeConfiguration instead, since that's the mechanism confirmed to
+// actually take effect on this charger's firmware.
 router.post('/:id/set-charging-profile', requireConnected, async (req, res) => {
-  const { connectorId = 0, limitKw } = req.body;
-  const kw = parseFloat(limitKw);
-  if (!limitKw || isNaN(kw) || kw <= 0) {
-    return res.status(400).json({ error: 'limitKw is required and must be a positive number' });
+  const { connectorId = 0, limitKw, limitAmps } = req.body;
+  const scope = parseInt(connectorId);
+  const kw = limitKw !== undefined && limitKw !== '' && limitKw !== null ? parseFloat(limitKw) : null;
+  const amps = limitAmps !== undefined && limitAmps !== '' && limitAmps !== null ? parseFloat(limitAmps) : null;
+
+  if (kw === null && amps === null) {
+    return res.status(400).json({ error: 'Enter a kW and/or an Amp limit' });
   }
+  if (kw !== null && (isNaN(kw) || kw <= 0)) {
+    return res.status(400).json({ error: 'limitKw must be a positive number' });
+  }
+  if (amps !== null && (isNaN(amps) || amps <= 0)) {
+    return res.status(400).json({ error: 'limitAmps must be a positive number' });
+  }
+  if (amps !== null && scope !== 0) {
+    return res.status(400).json({ error: 'Max Current (A) only applies to Total scope — the charger has no per-connector config key for this' });
+  }
+
   try {
-    const result = await setChargingProfile(req.params.id, parseInt(connectorId), Math.round(kw * 1000));
+    const result = {};
+    if (kw !== null) {
+      result.chargingProfile = await setChargingProfile(req.params.id, scope, Math.round(kw * 1000));
+    }
+    if (amps !== null) {
+      result.maxCurrentConfig = await changeConfiguration(req.params.id, 'ChargePointMaxCurrentLimit', String(Math.round(amps)));
+    }
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
