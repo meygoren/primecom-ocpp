@@ -122,6 +122,23 @@ wss.on('connection', (ws, req, chargePointId) => {
   console.log(`[WS] Charger connected: ${chargePointId}`);
   connections.set(chargePointId, ws);
 
+  (async () => {
+    // A live socket is proof the charger is reachable — self-heal a stale
+    // 'offline' badge left over from a previous drop without waiting on a
+    // fresh BootNotification/StatusNotification. Skip if mid-transaction or
+    // faulted so a bare reconnect doesn't clobber real charger state.
+    const { error } = await supabase
+      .from('chargers')
+      .update({ status: 'online', last_seen: new Date().toISOString() })
+      .eq('charger_id', chargePointId)
+      .neq('status', 'charging')
+      .neq('status', 'faulted');
+
+    if (error) {
+      console.error(`[WS] Failed to mark ${chargePointId} online:`, error.message);
+    }
+  })();
+
   // Answers a server-initiated ping; proof the socket is still alive even
   // when the charger has nothing OCPP-level to send.
   ws.isAlive = true;
