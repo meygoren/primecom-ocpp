@@ -54,14 +54,25 @@ const ALL_COMMANDS = [
     label: 'Set Power Limit',
     description: 'Cap output power in kW — total output or a single connector',
     fields: [
-      { name: 'connectorId', label: 'Connector (0 = Total Output)', default: '0', type: 'number' },
+      { name: 'connectorId', label: 'Scope', default: '0', type: 'pill', dynamicOptions: 'connectors' },
       { name: 'limitKw', label: 'Power Limit (kW)', default: '', type: 'number', step: '0.1', parse: 'float' },
     ],
     settingKey: null,
   },
 ];
 
-export default function CommandPanel({ chargerId, activeSession }) {
+const CONNECTOR_LETTERS = 'ABCDEFGH';
+
+function connectorPillOptions(connectorCount) {
+  const count = connectorCount > 0 ? connectorCount : 2;
+  const options = [{ value: '0', label: 'Total' }];
+  for (let i = 1; i <= count; i++) {
+    options.push({ value: String(i), label: `Connector ${CONNECTOR_LETTERS[i - 1] || i}` });
+  }
+  return options;
+}
+
+export default function CommandPanel({ chargerId, activeSession, connectorCount }) {
   const profile = useProfile();
   const canCommand = profile?.role === 'admin' || profile?.role === 'operator';
 
@@ -99,7 +110,7 @@ export default function CommandPanel({ chargerId, activeSession }) {
     try {
       const body = {};
       active.fields.forEach((f) => {
-        if (f.type !== 'number') {
+        if (f.type === 'text') {
           body[f.name] = values[f.name];
         } else {
           body[f.name] = f.parse === 'float' ? parseFloat(values[f.name]) : parseInt(values[f.name]);
@@ -182,22 +193,49 @@ export default function CommandPanel({ chargerId, activeSession }) {
               <label style={{ fontSize: 12, color: '#8892a4', display: 'block', marginBottom: 4 }}>
                 {f.label}
               </label>
-              <input
-                type={f.type}
-                step={f.step}
-                value={values[f.name] || ''}
-                onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
-                style={{
-                  width: '100%',
-                  background: '#1a1d27',
-                  border: '1px solid #2e3347',
-                  borderRadius: 6,
-                  padding: '7px 10px',
-                  color: '#f1f5f9',
-                  fontSize: 13,
-                  outline: 'none',
-                }}
-              />
+              {f.type === 'pill' ? (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(f.dynamicOptions === 'connectors' ? connectorPillOptions(connectorCount) : f.options).map((opt) => {
+                    const selected = (values[f.name] ?? f.default) === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setValues({ ...values, [f.name]: opt.value })}
+                        style={{
+                          background: selected ? '#47a141' : '#1a1d27',
+                          border: `1px solid ${selected ? '#47a141' : '#2e3347'}`,
+                          borderRadius: 999,
+                          padding: '6px 14px',
+                          color: selected ? '#fff' : '#f1f5f9',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <input
+                  type={f.type}
+                  step={f.step}
+                  value={values[f.name] || ''}
+                  onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
+                  style={{
+                    width: '100%',
+                    background: '#1a1d27',
+                    border: '1px solid #2e3347',
+                    borderRadius: 6,
+                    padding: '7px 10px',
+                    color: '#f1f5f9',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+              )}
             </div>
           ))}
 
