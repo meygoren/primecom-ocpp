@@ -726,7 +726,7 @@ export default function ChargerDetail() {
 
         {/* Command panel */}
         <div>
-          <CommandPanel chargerId={charger.charger_id} activeSession={activeSession} />
+          <CommandPanel chargerId={charger.charger_id} activeSession={activeSession} connectorCount={charger.connector_count} />
         </div>
       </div>
     </div>
