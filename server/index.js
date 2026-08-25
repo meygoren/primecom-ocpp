@@ -47,6 +47,7 @@ const truckMapRouter = require('./routes/truckMap');
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
 const HEARTBEAT_CHECK_INTERVAL_MS = 30 * 1000; // check every 30 seconds
+const WS_PING_INTERVAL_MS = 25 * 1000; // keep intermediary proxies (Railway) from idling out the socket
 
 // --- Express app ---
 const app = express();
@@ -121,6 +122,13 @@ wss.on('connection', (ws, req, chargePointId) => {
   console.log(`[WS] Charger connected: ${chargePointId}`);
   connections.set(chargePointId, ws);
 
+  // Answers a server-initiated ping; proof the socket is still alive even
+  // when the charger has nothing OCPP-level to send.
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
   ws.on('message', async (data) => {
     const raw = data.toString();
     console.log(`[WS] → ${chargePointId}: ${raw}`);
@@ -146,6 +154,24 @@ wss.on('connection', (ws, req, chargePointId) => {
     console.error(`[WS] Error from ${chargePointId}:`, err.message);
   });
 });
+
+// --- WebSocket-level keepalive ---
+// Pings every open connection on a fixed cadence so the socket carries
+// traffic even between OCPP Heartbeats. This stops idle-connection timeouts
+// on intermediary proxies (e.g. Railway's edge) from silently dropping the
+// TCP connection on the server side while the charger still believes it's
+// connected. Also terminates any connection that failed to pong back since
+// the last ping — a dead peer that never sent a close frame.
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log('[WS] No pong received in time, terminating stale connection');
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, WS_PING_INTERVAL_MS);
 
 // --- Heartbeat timeout checker ---
 // Mark chargers offline if they haven't sent a heartbeat in 90 seconds
