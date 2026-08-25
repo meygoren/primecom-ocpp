@@ -49,6 +49,16 @@ const ALL_COMMANDS = [
     fields: [],
     settingKey: 'feat_clear_cache',
   },
+  {
+    key: 'set-charging-profile',
+    label: 'Set Power Limit',
+    description: 'Cap output power in kW — total output or a single connector',
+    fields: [
+      { name: 'connectorId', label: 'Connector (0 = Total Output)', default: '0', type: 'number' },
+      { name: 'limitKw', label: 'Power Limit (kW)', default: '', type: 'number', step: '0.1', parse: 'float' },
+    ],
+    settingKey: null,
+  },
 ];
 
 export default function CommandPanel({ chargerId, activeSession }) {
@@ -89,7 +99,11 @@ export default function CommandPanel({ chargerId, activeSession }) {
     try {
       const body = {};
       active.fields.forEach((f) => {
-        body[f.name] = f.type === 'number' ? parseInt(values[f.name]) : values[f.name];
+        if (f.type !== 'number') {
+          body[f.name] = values[f.name];
+        } else {
+          body[f.name] = f.parse === 'float' ? parseFloat(values[f.name]) : parseInt(values[f.name]);
+        }
       });
       const data = await api.sendCommand(chargerId, active.key, body);
       setResult(data.result);
@@ -170,6 +184,7 @@ export default function CommandPanel({ chargerId, activeSession }) {
               </label>
               <input
                 type={f.type}
+                step={f.step}
                 value={values[f.name] || ''}
                 onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
                 style={{
