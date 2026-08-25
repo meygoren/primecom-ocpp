@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
 
@@ -72,6 +72,14 @@ function connectorPillOptions(connectorCount) {
   return options;
 }
 
+// Pulls the first period's limit out of a GetCompositeSchedule response —
+// that's the limit in effect right now for the requested scope.
+function extractScheduleLimit(result) {
+  const period = result?.chargingSchedule?.chargingSchedulePeriod?.[0];
+  if (!period || period.limit == null) return null;
+  return { unit: result.chargingSchedule.chargingRateUnit, value: period.limit };
+}
+
 export default function CommandPanel({ chargerId, activeSession, connectorCount }) {
   const profile = useProfile();
   const canCommand = profile?.role === 'admin' || profile?.role === 'operator';
@@ -86,6 +94,36 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [currentLimit, setCurrentLimit] = useState(null);
+  const [currentLimitLoading, setCurrentLimitLoading] = useState(false);
+
+  // Show the charger's currently effective power limit for the selected
+  // scope while the Set Power Limit form is open, refreshing on scope change.
+  useEffect(() => {
+    if (active?.key !== 'set-charging-profile') {
+      setCurrentLimit(null);
+      return;
+    }
+    const connectorId = parseInt(values.connectorId ?? '0');
+    let cancelled = false;
+    setCurrentLimitLoading(true);
+    setCurrentLimit(null);
+    Promise.all([
+      api.sendCommand(chargerId, 'get-composite-schedule', { connectorId, chargingRateUnit: 'W' }).catch(() => null),
+      api.sendCommand(chargerId, 'get-composite-schedule', { connectorId, chargingRateUnit: 'A' }).catch(() => null),
+    ]).then(([wRes, aRes]) => {
+      if (cancelled) return;
+      const wLimit = extractScheduleLimit(wRes?.result);
+      const aLimit = extractScheduleLimit(aRes?.result);
+      setCurrentLimit({
+        kw: wLimit?.unit === 'W' ? wLimit.value / 1000 : null,
+        amp: aLimit?.unit === 'A' ? aLimit.value : null,
+      });
+    }).finally(() => {
+      if (!cancelled) setCurrentLimitLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [active?.key, values.connectorId, chargerId]);
 
   function openCommand(cmd) {
     const defaults = {};
@@ -187,6 +225,23 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
           <div style={{ fontSize: 14, fontWeight: 600, color: '#f1f5f9', marginBottom: 12 }}>
             {active.label}
           </div>
+
+          {active.key === 'set-charging-profile' && (
+            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 6, fontSize: 12 }}>
+              <span style={{ color: '#8892a4' }}>Current limit: </span>
+              {currentLimitLoading ? (
+                <span style={{ color: '#8892a4' }}>Reading from charger…</span>
+              ) : currentLimit?.kw != null || currentLimit?.amp != null ? (
+                <span style={{ color: '#47a141', fontWeight: 600 }}>
+                  {currentLimit.kw != null ? `${currentLimit.kw.toFixed(1)} kW` : '— kW'}
+                  {'  ·  '}
+                  {currentLimit.amp != null ? `${currentLimit.amp} A` : '— A'}
+                </span>
+              ) : (
+                <span style={{ color: '#8892a4' }}>No limit reported by charger</span>
+              )}
+            </div>
+          )}
 
           {active.fields.map((f) => (
             <div key={f.name} style={{ marginBottom: 10 }}>

@@ -11,6 +11,7 @@ const getDiagnostics = require('../ocpp/commands/getDiagnostics');
 const unlockConnector = require('../ocpp/commands/unlockConnector');
 const clearCache = require('../ocpp/commands/clearCache');
 const setChargingProfile = require('../ocpp/commands/setChargingProfile');
+const getCompositeSchedule = require('../ocpp/commands/getCompositeSchedule');
 
 function requireConnected(req, res, next) {
   const { id } = req.params;
@@ -140,6 +141,18 @@ router.post('/:id/set-charging-profile', requireConnected, async (req, res) => {
   }
   try {
     const result = await setChargingProfile(req.params.id, parseInt(connectorId), Math.round(kw * 1000));
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/commands/:id/get-composite-schedule — read the charger's
+// currently effective power limit for a scope (0 = total, or a connector)
+router.post('/:id/get-composite-schedule', requireConnected, async (req, res) => {
+  const { connectorId = 0, duration, chargingRateUnit } = req.body;
+  try {
+    const result = await getCompositeSchedule(req.params.id, parseInt(connectorId), duration, chargingRateUnit);
     res.json({ success: true, result });
   } catch (err) {
     res.status(500).json({ error: err.message });
