@@ -1,6 +1,10 @@
 const supabase = require('../../db/supabase');
 const connections = require('../../state/connections');
 
+// How long to wait after a connector reports "Preparing" before sending
+// RemoteStartTransaction for auto-start. See the comment at the call site.
+const AUTO_START_DELAY_MS = 10000;
+
 // Maps OCPP connector status to our internal status
 function mapStatus(ocppStatus) {
   switch (ocppStatus) {
@@ -68,8 +72,12 @@ async function handleStatusNotification(chargePointId, payload) {
         .single();
 
       if (chargerRow?.auto_start_enabled) {
-        // Small delay so the charger finishes its Preparing state before we
-        // send the command — some chargers reject immediate remote-start.
+        // Delay before remote-starting. A DC charger reports Preparing as soon
+        // as the cable is seated, but the vehicle handshake behind it takes
+        // several seconds; authorising it too early is one way to end up with
+        // a session that opens and then fails to bring the DC stage up
+        // ("DCStartFailed"). Waiting costs nothing — the charger's own
+        // ConnectionTimeOut is typically 60s.
         setTimeout(async () => {
           if (!connections.has(chargePointId)) {
             console.log(`[AutoStart] Skipped ${chargePointId} — not connected`);
@@ -104,7 +112,7 @@ async function handleStatusNotification(chargePointId, payload) {
           } catch (err) {
             console.error(`[AutoStart] RemoteStartTransaction failed for ${chargePointId}:`, err.message);
           }
-        }, 2000);
+        }, AUTO_START_DELAY_MS);
       }
     } catch (err) {
       console.error(`[AutoStart] Check error for ${chargePointId}:`, err.message);

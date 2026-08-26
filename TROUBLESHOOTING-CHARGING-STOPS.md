@@ -68,3 +68,36 @@ server now skips the auto-start when a session is already open on that charger.
 
 If a charger misbehaves while testing, turn Auto Start and Auto Transfer VIN off
 for it and retest — that isolates server-initiated commands from the problem.
+
+## 5. `DCStartFailed` — the session opens but no power flows
+
+On a DC unit the log looks like this (real example, R3243025108003):
+
+```
+StatusNotification  {"status":"Preparing","connectorId":1}
+RemoteStartTransaction {"idTag":"AUTO","connectorId":1}      ← auto-start, 2s after Preparing
+StartTransaction    {"idTag":"AUTO","meterStart":6580}
+StatusNotification  {"status":"Charging"}
+StopTransaction     {"reason":"Other","meterStop":6580}       ← 4s later, meterStop == meterStart
+StatusNotification  {"info":"DCStartFailed","status":"Finishing"}
+MeterValues         Voltage 0.0 V, Current 0.0 A
+```
+
+`DCStartFailed` is the charger's own power stage refusing to come up. The
+session was authorised fine — zero energy moved. Things to rule out, in order:
+
+1. **Auto Start.** The server sends `RemoteStartTransaction` shortly after the
+   connector reports `Preparing`. On a DC charger the vehicle handshake behind
+   `Preparing` takes several seconds, and authorising into the middle of it can
+   fail the DC start. Turn Auto Start off for the charger and start the session
+   at the charger instead — if that charges, auto-start timing is the cause.
+2. **Auto Transfer VIN.** The `DataTransfer(GetVIN)` this sends is a
+   vendor-specific message. Some firmware never answers it at all. Turn it off
+   while diagnosing.
+3. **Power limits.** Check what limits are actually in force with
+   Get Composite Schedule for connector 0 and for each connector, and check
+   `ChargePointMaxCurrentLimit` with Get Configuration. A limit below what the
+   vehicle needs to begin can fail the start. Clear the limits and retest.
+
+If it still fails with all three off, the problem is at the charger or the
+vehicle, not the Central System.
