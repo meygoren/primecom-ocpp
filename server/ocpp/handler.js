@@ -13,20 +13,32 @@ const MESSAGE_TYPE_CALL = 2;
 const MESSAGE_TYPE_CALLRESULT = 3;
 const MESSAGE_TYPE_CALLERROR = 4;
 
-// Logs every OCPP message to the ocpp_logs table
-async function logMessage(chargePointId, direction, messageTypeId, action, messageId, payload) {
-  try {
-    await supabase.from('ocpp_logs').insert({
+// Logs every OCPP message to the ocpp_logs table.
+//
+// IMPORTANT: this is deliberately fire-and-forget (no `await` at the call
+// sites). A charger waits a limited time for its CallResult — if we made it
+// wait on a Supabase round trip before every reply, a slow database would
+// delay the reply past the charger's own timeout and the charger would abort
+// the transaction it just started. Logging must never sit on the reply path.
+function logMessage(chargePointId, direction, messageTypeId, action, messageId, payload) {
+  supabase
+    .from('ocpp_logs')
+    .insert({
       charger_id: chargePointId,
       direction,
       message_type: messageTypeId,
       action: action || null,
       message_id: messageId,
       payload: payload || {},
+    })
+    .then(({ error }) => {
+      if (error) {
+        console.error(`[Logger] Failed to write log for ${chargePointId}:`, error.message);
+      }
+    })
+    .catch((err) => {
+      console.error(`[Logger] Failed to write log for ${chargePointId}:`, err.message);
     });
-  } catch (err) {
-    console.error(`[Logger] Failed to write log for ${chargePointId}:`, err.message);
-  }
 }
 
 async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
@@ -43,7 +55,7 @@ async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
   if (messageTypeId === MESSAGE_TYPE_CALLRESULT) {
     // Response to a command we sent
     const payload = rest[0];
-    await logMessage(chargePointId, 'incoming', messageTypeId, null, messageId, payload);
+    logMessage(chargePointId, 'incoming', messageTypeId, null, messageId, payload);
 
     const pending = pendingCalls.get(messageId);
     if (pending) {
@@ -56,7 +68,7 @@ async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
 
   if (messageTypeId === MESSAGE_TYPE_CALLERROR) {
     const [errorCode, errorDescription, errorDetails] = rest;
-    await logMessage(chargePointId, 'incoming', messageTypeId, null, messageId, {
+    logMessage(chargePointId, 'incoming', messageTypeId, null, messageId, {
       errorCode,
       errorDescription,
       errorDetails,
@@ -77,7 +89,7 @@ async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
   }
 
   const [action, payload] = rest;
-  await logMessage(chargePointId, 'incoming', messageTypeId, action, messageId, payload);
+  logMessage(chargePointId, 'incoming', messageTypeId, action, messageId, payload);
 
   let response;
   try {
@@ -125,9 +137,11 @@ async function handleMessage(chargePointId, rawMessage, ws, pendingCalls) {
     return;
   }
 
+  // Reply first, log second — the charger is waiting on this.
   const reply = JSON.stringify([MESSAGE_TYPE_CALLRESULT, messageId, response]);
-  await logMessage(chargePointId, 'outgoing', MESSAGE_TYPE_CALLRESULT, action, messageId, response);
   ws.send(reply);
+  console.log(`[WS] ← ${chargePointId}: ${reply}`);
+  logMessage(chargePointId, 'outgoing', MESSAGE_TYPE_CALLRESULT, action, messageId, response);
 }
 
 module.exports = { handleMessage };

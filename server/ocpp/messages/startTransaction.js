@@ -1,16 +1,82 @@
 const supabase = require('../../db/supabase');
 
-// Module-level counter seeded from current time. Incrementing ensures uniqueness
-// even when two connectors start within the same second on the same server.
-let _txCounter = Math.floor(Date.now() / 1000);
-function generateTransactionId() {
+// --- Transaction ID generation -------------------------------------------
+//
+// OCPP 1.6 lets the Central System pick any integer, but charger firmware is
+// not always so relaxed: several units store the transactionId in a small
+// fixed-width field and misbehave (or drop the session) when handed a huge
+// number. We therefore hand out small, sequential IDs (1, 2, 3 ...) the way
+// every reference Central System does.
+//
+// The counter is seeded once at startup from the highest small ID already in
+// the sessions table, so IDs stay unique across server restarts. Older
+// epoch-based IDs (roughly 1.7 billion) are excluded from the seed lookup so
+// one legacy row does not push the counter back into the huge range.
+const MAX_LEGACY_SAFE_ID = 1000000;
+
+let _txCounter = 0;
+let _seedPromise = null;
+
+function seedTransactionCounter() {
+  if (!_seedPromise) {
+    _seedPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('sessions')
+          .select('transaction_id')
+          .lt('transaction_id', MAX_LEGACY_SAFE_ID)
+          .order('transaction_id', { ascending: false })
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+        _txCounter = data?.[0]?.transaction_id || 0;
+        console.log(`[StartTransaction] Transaction ID counter seeded at ${_txCounter}`);
+      } catch (err) {
+        // Fall back to a mid-range starting point rather than risk colliding
+        // with existing rows. Still small enough for any charger firmware.
+        _txCounter = 100000;
+        console.error('[StartTransaction] Counter seed failed, starting at 100000:', err.message);
+      }
+    })();
+  }
+  return _seedPromise;
+}
+
+// Warm the counter as soon as the server boots so the first real transaction
+// never has to wait on the database for its ID.
+seedTransactionCounter();
+
+async function generateTransactionId() {
+  await seedTransactionCounter();
   return ++_txCounter;
 }
 
 async function handleStartTransaction(chargePointId, payload) {
   const { connectorId, idTag, meterStart, timestamp } = payload;
-  const transactionId = generateTransactionId();
+  const transactionId = await generateTransactionId();
   const startTime = timestamp || new Date().toISOString();
+
+  console.log(
+    `[StartTransaction] ${chargePointId} connector ${connectorId} idTag "${idTag}" ` +
+      `meterStart ${meterStart} → transactionId ${transactionId} (Accepted)`
+  );
+
+  // Everything below is bookkeeping. It runs in the background so the charger
+  // gets its transactionId immediately — a slow database must never delay the
+  // reply, because a charger that does not get StartTransaction.conf in time
+  // aborts the session it just started.
+  persistStartTransaction(chargePointId, payload, transactionId, startTime).catch((err) => {
+    console.error(`[StartTransaction] Background persist failed for ${chargePointId}:`, err.message);
+  });
+
+  return {
+    transactionId,
+    idTagInfo: { status: 'Accepted' },
+  };
+}
+
+async function persistStartTransaction(chargePointId, payload, transactionId, startTime) {
+  const { connectorId, idTag } = payload;
 
   const { error } = await supabase.from('sessions').insert({
     charger_id: chargePointId,
@@ -70,7 +136,9 @@ async function handleStartTransaction(chargePointId, payload) {
     }
   }
 
-  // Auto Transfer VIN — send DataTransfer(GetVIN) if enabled for this charger
+  // Auto Transfer VIN — send DataTransfer(GetVIN) if enabled for this charger.
+  // Delayed well past the start of the session: some firmware handles a
+  // vendor DataTransfer badly while it is still bringing the session up.
   try {
     const { data: chargerRow } = await supabase
       .from('chargers')
@@ -91,16 +159,11 @@ async function handleStartTransaction(chargePointId, payload) {
         } catch (err) {
           console.error(`[StartTransaction] Auto Transfer VIN failed for ${chargePointId}:`, err.message);
         }
-      }, 2000);
+      }, 30000);
     }
   } catch (err) {
     console.error('[StartTransaction] Auto Transfer VIN check error:', err.message);
   }
-
-  return {
-    transactionId,
-    idTagInfo: { status: 'Accepted' },
-  };
 }
 
 module.exports = handleStartTransaction;

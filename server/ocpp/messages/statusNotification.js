@@ -75,6 +75,27 @@ async function handleStatusNotification(chargePointId, payload) {
             console.log(`[AutoStart] Skipped ${chargePointId} — not connected`);
             return;
           }
+
+          // If the charger already started a session on its own (plug-and-charge
+          // or an RFID swipe in the gap), do NOT send RemoteStartTransaction.
+          // A remote start aimed at a connector that is already charging makes
+          // some firmware tear the running session down a few seconds in.
+          const openSince = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+          const { data: openSessions } = await supabase
+            .from('sessions')
+            .select('transaction_id')
+            .eq('charger_id', chargePointId)
+            .is('stop_time', null)
+            .gte('start_time', openSince)
+            .limit(1);
+
+          if (openSessions?.length) {
+            console.log(
+              `[AutoStart] Skipped ${chargePointId} — transaction ${openSessions[0].transaction_id} already running`
+            );
+            return;
+          }
+
           const remoteStart = require('../commands/remoteStartTransaction');
           const idTag = chargerRow.auto_start_id_tag || 'AUTO';
           try {
