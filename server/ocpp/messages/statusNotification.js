@@ -1,6 +1,10 @@
 const supabase = require('../../db/supabase');
 const connections = require('../../state/connections');
 
+// How long to wait after a connector reports "Preparing" before sending
+// RemoteStartTransaction for auto-start. See the comment at the call site.
+const AUTO_START_DELAY_MS = 10000;
+
 // Maps OCPP connector status to our internal status
 function mapStatus(ocppStatus) {
   switch (ocppStatus) {
@@ -68,13 +72,38 @@ async function handleStatusNotification(chargePointId, payload) {
         .single();
 
       if (chargerRow?.auto_start_enabled) {
-        // Small delay so the charger finishes its Preparing state before we
-        // send the command — some chargers reject immediate remote-start.
+        // Delay before remote-starting. A DC charger reports Preparing as soon
+        // as the cable is seated, but the vehicle handshake behind it takes
+        // several seconds; authorising it too early is one way to end up with
+        // a session that opens and then fails to bring the DC stage up
+        // ("DCStartFailed"). Waiting costs nothing — the charger's own
+        // ConnectionTimeOut is typically 60s.
         setTimeout(async () => {
           if (!connections.has(chargePointId)) {
             console.log(`[AutoStart] Skipped ${chargePointId} — not connected`);
             return;
           }
+
+          // If the charger already started a session on its own (plug-and-charge
+          // or an RFID swipe in the gap), do NOT send RemoteStartTransaction.
+          // A remote start aimed at a connector that is already charging makes
+          // some firmware tear the running session down a few seconds in.
+          const openSince = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+          const { data: openSessions } = await supabase
+            .from('sessions')
+            .select('transaction_id')
+            .eq('charger_id', chargePointId)
+            .is('stop_time', null)
+            .gte('start_time', openSince)
+            .limit(1);
+
+          if (openSessions?.length) {
+            console.log(
+              `[AutoStart] Skipped ${chargePointId} — transaction ${openSessions[0].transaction_id} already running`
+            );
+            return;
+          }
+
           const remoteStart = require('../commands/remoteStartTransaction');
           const idTag = chargerRow.auto_start_id_tag || 'AUTO';
           try {
@@ -83,7 +112,7 @@ async function handleStatusNotification(chargePointId, payload) {
           } catch (err) {
             console.error(`[AutoStart] RemoteStartTransaction failed for ${chargePointId}:`, err.message);
           }
-        }, 2000);
+        }, AUTO_START_DELAY_MS);
       }
     } catch (err) {
       console.error(`[AutoStart] Check error for ${chargePointId}:`, err.message);
