@@ -6,6 +6,7 @@ import CommandPanel from '../components/CommandPanel';
 import MeterChart from '../components/MeterChart';
 import { formatDistanceToNow, formatDateTime } from '../lib/time';
 import { ArrowLeft, Pencil, Check, X } from 'lucide-react';
+import { CHARGER_PROFILES, getChargerProfile } from '../lib/chargerProfiles';
 
 export default function ChargerDetail() {
   const { id } = useParams();
@@ -228,6 +229,20 @@ export default function ChargerDetail() {
                 fieldSaving={fieldSaving}
                 showEdit={showNotesEdit}
                 onStartEdit={(field, val) => { setEditingField(field); setFieldValue(String(val)); }}
+                onSave={saveField}
+                onCancel={() => setEditingField(null)}
+                onFieldValueChange={setFieldValue}
+              />
+              <EditableInfoCard
+                label="Charger Type"
+                value={getChargerProfile(charger.charger_type).label}
+                field="charger_type"
+                options={CHARGER_PROFILES}
+                editingField={editingField}
+                fieldValue={fieldValue}
+                fieldSaving={fieldSaving}
+                showEdit={showNotesEdit}
+                onStartEdit={(field) => { setEditingField(field); setFieldValue(charger.charger_type || CHARGER_PROFILES[0].key); }}
                 onSave={saveField}
                 onCancel={() => setEditingField(null)}
                 onFieldValueChange={setFieldValue}
@@ -726,7 +741,7 @@ export default function ChargerDetail() {
 
         {/* Command panel */}
         <div>
-          <CommandPanel chargerId={charger.charger_id} activeSession={activeSession} connectorCount={charger.connector_count} />
+          <CommandPanel chargerId={charger.charger_id} activeSession={activeSession} connectorCount={charger.connector_count} chargerType={charger.charger_type} />
         </div>
       </div>
     </div>
@@ -750,7 +765,7 @@ function InfoCard({ label, value, cols }) {
   );
 }
 
-function EditableInfoCard({ label, value, field, cols, editingField, fieldValue, fieldSaving, showEdit, onStartEdit, onSave, onCancel, onFieldValueChange }) {
+function EditableInfoCard({ label, value, field, cols, options, editingField, fieldValue, fieldSaving, showEdit, onStartEdit, onSave, onCancel, onFieldValueChange }) {
   const isEditing = editingField === field;
   return (
     <div
@@ -775,21 +790,43 @@ function EditableInfoCard({ label, value, field, cols, editingField, fieldValue,
       </div>
       {isEditing ? (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-          <input
-            value={fieldValue}
-            onChange={(e) => onFieldValueChange(e.target.value)}
-            autoFocus
-            style={{
-              flex: 1,
-              background: '#22263a',
-              border: '1px solid #47a141',
-              borderRadius: 5,
-              padding: '5px 8px',
-              color: '#f1f5f9',
-              fontSize: 13,
-              outline: 'none',
-            }}
-          />
+          {options ? (
+            <select
+              value={fieldValue}
+              onChange={(e) => onFieldValueChange(e.target.value)}
+              autoFocus
+              style={{
+                flex: 1,
+                background: '#22263a',
+                border: '1px solid #47a141',
+                borderRadius: 5,
+                padding: '5px 8px',
+                color: '#f1f5f9',
+                fontSize: 13,
+                outline: 'none',
+              }}
+            >
+              {options.map((opt) => (
+                <option key={opt.key} value={opt.key}>{opt.label}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={fieldValue}
+              onChange={(e) => onFieldValueChange(e.target.value)}
+              autoFocus
+              style={{
+                flex: 1,
+                background: '#22263a',
+                border: '1px solid #47a141',
+                borderRadius: 5,
+                padding: '5px 8px',
+                color: '#f1f5f9',
+                fontSize: 13,
+                outline: 'none',
+              }}
+            />
+          )}
           <button
             onClick={() => onSave(field)}
             disabled={fieldSaving}

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const connections = require('../state/connections');
+const supabase = require('../db/supabase');
+const { getChargerProfile } = require('../ocpp/chargerProfiles');
 const remoteStartTransaction = require('../ocpp/commands/remoteStartTransaction');
 const remoteStopTransaction = require('../ocpp/commands/remoteStopTransaction');
 const reset = require('../ocpp/commands/reset');
@@ -132,11 +134,14 @@ router.post('/:id/clear-cache', requireConnected, async (req, res) => {
 });
 
 // POST /api/commands/:id/set-charging-profile — cap output power, total
-// (connectorId 0) or per connector. limitKw sends a Smart Charging
-// SetChargingProfile call. limitAmps (Total scope only — the charger has
-// no per-connector equivalent) writes ChargePointMaxCurrentLimit via
-// ChangeConfiguration instead, since that's the mechanism confirmed to
-// actually take effect on this charger's firmware.
+// (connectorId 0) or per connector. limitKw sends a standard OCPP Smart
+// Charging SetChargingProfile call, which works the same on any vendor that
+// supports the SmartCharging feature profile. limitAmps (Total scope only —
+// the charger has no per-connector equivalent) writes a proprietary
+// current-limit key via ChangeConfiguration instead — which config key (or
+// whether one exists at all) depends on the charger's vendor/firmware, so
+// it's looked up per charger_type via chargerProfiles.js rather than
+// hardcoded to one vendor's key.
 router.post('/:id/set-charging-profile', requireConnected, async (req, res) => {
   const { connectorId = 0, limitKw, limitAmps } = req.body;
   const scope = parseInt(connectorId);
@@ -156,13 +161,27 @@ router.post('/:id/set-charging-profile', requireConnected, async (req, res) => {
     return res.status(400).json({ error: 'Max Current (A) only applies to Total scope — the charger has no per-connector config key for this' });
   }
 
+  let currentLimitConfigKey = null;
+  if (amps !== null) {
+    const { data: chargerRow } = await supabase
+      .from('chargers')
+      .select('charger_type')
+      .eq('charger_id', req.params.id)
+      .single();
+    const profile = getChargerProfile(chargerRow?.charger_type);
+    currentLimitConfigKey = profile.currentLimitConfigKey;
+    if (!currentLimitConfigKey) {
+      return res.status(400).json({ error: `This charger's type (${profile.label}) has no known Max Current config key — use the kW (Smart Charging) limit instead` });
+    }
+  }
+
   try {
     const result = {};
     if (kw !== null) {
       result.chargingProfile = await setChargingProfile(req.params.id, scope, Math.round(kw * 1000));
     }
     if (amps !== null) {
-      result.maxCurrentConfig = await changeConfiguration(req.params.id, 'ChargePointMaxCurrentLimit', String(Math.round(amps)));
+      result.maxCurrentConfig = await changeConfiguration(req.params.id, currentLimitConfigKey, String(Math.round(amps)));
     }
     res.json({ success: true, result });
   } catch (err) {

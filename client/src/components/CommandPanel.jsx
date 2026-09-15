@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
+import { getChargerProfile } from '../lib/chargerProfiles';
 
 const ALL_COMMANDS = [
   { key: 'reset', label: 'Reboot', description: 'Send a Soft reset to the charger', fields: [], settingKey: null },
@@ -63,7 +64,7 @@ const ALL_COMMANDS = [
         type: 'number',
         step: '1',
         parse: 'float',
-        showIf: (v) => (v.connectorId ?? '0') === '0',
+        showIf: (v, ctx) => (v.connectorId ?? '0') === '0' && ctx.chargerProfile.hasCurrentLimitKey,
       },
     ],
     settingKey: null,
@@ -89,9 +90,10 @@ function extractScheduleLimit(result) {
   return { unit: result.chargingSchedule.chargingRateUnit, value: period.limit };
 }
 
-export default function CommandPanel({ chargerId, activeSession, connectorCount }) {
+export default function CommandPanel({ chargerId, activeSession, connectorCount, chargerType }) {
   const profile = useProfile();
   const canCommand = profile?.role === 'admin' || profile?.role === 'operator';
+  const chargerProfile = getChargerProfile(chargerType);
 
   const COMMANDS = ALL_COMMANDS.filter((cmd) => {
     if (!cmd.settingKey) return true;
@@ -157,7 +159,7 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
     try {
       const body = {};
       active.fields.forEach((f) => {
-        if (f.showIf && !f.showIf(values)) return;
+        if (f.showIf && !f.showIf(values, { chargerProfile })) return;
         const raw = values[f.name];
         if (f.type === 'text') {
           body[f.name] = raw;
@@ -254,7 +256,7 @@ export default function CommandPanel({ chargerId, activeSession, connectorCount 
             </div>
           )}
 
-          {active.fields.filter((f) => !f.showIf || f.showIf(values)).map((f) => (
+          {active.fields.filter((f) => !f.showIf || f.showIf(values, { chargerProfile })).map((f) => (
             <div key={f.name} style={{ marginBottom: 10 }}>
               <label style={{ fontSize: 12, color: '#8892a4', display: 'block', marginBottom: 4 }}>
                 {f.label}
