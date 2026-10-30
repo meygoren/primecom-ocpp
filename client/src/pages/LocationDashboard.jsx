@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Settings2, Download, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Settings2, Download, PlayCircle, X, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useFleet } from '../contexts/FleetContext';
 import { useProfile } from '../contexts/ProfileContext';
 import StatusBadge from '../components/StatusBadge';
 import { formatDistanceToNow, formatDuration } from '../lib/time';
+import { getDemoLive, getDemoSessions, getDemoCurve } from '../lib/demoData';
 
 // Energy dashboard for one charging location (e.g. Swift, San Francisco).
 // Answers: what is charging right now and how fast, what happened in each
@@ -91,6 +92,19 @@ export default function LocationDashboard() {
   const [rangeId, setRangeId] = useState(() => localStorage.getItem('location_range') || '7d');
   const [now, setNow] = useState(() => new Date());
 
+  // Demo mode: simulated data generated in the browser, nothing is saved.
+  // Turn on with the header button or by opening the dashboard with ?demo=1.
+  const [demo, setDemo] = useState(() => {
+    if (new URLSearchParams(window.location.search).get('demo') === '1') return true;
+    try { return localStorage.getItem('location_demo') === 'true'; } catch { return false; }
+  });
+  function toggleDemo(on) {
+    setDemo(on);
+    setLive(null);
+    setSessions([]);
+    try { localStorage.setItem('location_demo', String(on)); } catch { /* storage unavailable */ }
+  }
+
   const range = RANGES.find((r) => r.id === rangeId) || RANGES[1];
   const fleetId = fleet?.id;
 
@@ -100,7 +114,7 @@ export default function LocationDashboard() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await api.getFleetLive(fleetId);
+        const data = demo ? getDemoLive(fleet) : await api.getFleetLive(fleetId);
         if (!cancelled) { setLive(data); setLiveError(null); setNow(new Date()); }
       } catch (err) {
         if (!cancelled) setLiveError(err.message);
@@ -109,7 +123,7 @@ export default function LocationDashboard() {
     load();
     const iv = setInterval(load, LIVE_POLL_MS);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [fleetId]);
+  }, [fleetId, demo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Session history for the selected range
   const [historyTick, setHistoryTick] = useState(0);
@@ -118,16 +132,18 @@ export default function LocationDashboard() {
     let cancelled = false;
     async function load() {
       try {
-        const data = await api.getFleetSessions(fleetId, { from: rangeStart(range).toISOString() });
+        const data = demo
+          ? getDemoSessions(fleet, rangeStart(range).getTime())
+          : await api.getFleetSessions(fleetId, { from: rangeStart(range).toISOString() });
         if (!cancelled) { setSessions(data); setSessionsError(null); }
       } catch (err) {
         if (!cancelled) setSessionsError(err.message);
       }
     }
     load();
-    const iv = setInterval(load, HISTORY_POLL_MS);
+    const iv = setInterval(load, demo ? LIVE_POLL_MS : HISTORY_POLL_MS);
     return () => { cancelled = true; clearInterval(iv); };
-  }, [fleetId, range, historyTick]);
+  }, [fleetId, range, historyTick, demo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function selectRange(id) {
     setRangeId(id);
@@ -165,14 +181,37 @@ export default function LocationDashboard() {
             Live charging — refreshes every 5 seconds
           </div>
         </div>
-        {isAdmin && (
-          <button onClick={() => navigate(`/locations?id=${encodeURIComponent(fleet.id)}`)} style={btnStyle()}>
-            <Settings2 size={14} /> Manage location
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {!demo && (
+            <button onClick={() => toggleDemo(true)} style={btnStyle()} title="Show simulated data to try out the dashboard">
+              <PlayCircle size={14} /> Demo mode
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => navigate(`/locations?id=${encodeURIComponent(fleet.id)}`)} style={btnStyle()}>
+              <Settings2 size={14} /> Manage location
+            </button>
+          )}
+        </div>
       </div>
 
-      {liveError && <ErrorBanner message={liveError} />}
+      {demo && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          background: '#f59e0b1a', border: `1px solid ${C.amber}66`, borderRadius: 10,
+          padding: '10px 14px', fontSize: 13, color: C.text, marginBottom: 16,
+        }}>
+          <PlayCircle size={15} color={C.amber} />
+          <span style={{ flex: '1 1 240px' }}>
+            <strong>Demo mode</strong> — simulated chargers and sessions. Nothing here is real and nothing is saved.
+          </span>
+          <button onClick={() => toggleDemo(false)} style={{ ...btnStyle(), padding: '5px 12px' }}>
+            <X size={13} /> Exit demo
+          </button>
+        </div>
+      )}
+
+      {!demo && liveError && <ErrorBanner message={liveError} />}
 
       {/* Right-now tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 28 }}>
@@ -211,7 +250,7 @@ export default function LocationDashboard() {
           ))}
         </div>
       </div>
-      {sessionsError && <ErrorBanner message={sessionsError} />}
+      {!demo && sessionsError && <ErrorBanner message={sessionsError} />}
       <Summary sessions={sessions} systems={systems} systemOf={systemOf} range={range} now={now} />
 
       {/* History */}
@@ -220,7 +259,8 @@ export default function LocationDashboard() {
         systems={systems}
         systemOf={systemOf}
         fleet={fleet}
-        canEdit={canEdit}
+        canEdit={canEdit && !demo}
+        demo={demo}
         now={now}
         onChanged={() => setHistoryTick((t) => t + 1)}
       />
@@ -515,7 +555,7 @@ function formatHours(h) {
 
 // --- session history ------------------------------------------------------------
 
-function SessionHistory({ sessions, systems, systemOf, fleet, canEdit, now, onChanged }) {
+function SessionHistory({ sessions, systems, systemOf, fleet, canEdit, demo, now, onChanged }) {
   const [expanded, setExpanded] = useState(null);
   const [saving, setSaving] = useState(null);
   const [shown, setShown] = useState(25);
@@ -548,7 +588,7 @@ function SessionHistory({ sessions, systems, systemOf, fleet, canEdit, now, onCh
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${fleet.id}-sessions-${dayKey(now)}.csv`;
+    a.download = `${fleet.id}-${demo ? 'DEMO-' : ''}sessions-${dayKey(now)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -616,7 +656,7 @@ function SessionHistory({ sessions, systems, systemOf, fleet, canEdit, now, onCh
                   {open && (
                     <tr style={{ background: C.inner }}>
                       <td colSpan={12} style={{ padding: '0 16px 16px' }}>
-                        <SessionDetail session={s} fleetId={fleet.id} sys={sys} />
+                        <SessionDetail session={s} fleetId={fleet.id} sys={sys} demo={demo} />
                       </td>
                     </tr>
                   )}
@@ -640,19 +680,22 @@ function SessionHistory({ sessions, systems, systemOf, fleet, canEdit, now, onCh
   );
 }
 
-function SessionDetail({ session, fleetId, sys }) {
+function SessionDetail({ session, fleetId, sys, demo }) {
   const [curve, setCurve] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (demo) return; // demo curve is computed below, no request needed
     let cancelled = false;
     api.getSessionCurve(fleetId, session.id)
       .then((d) => { if (!cancelled) setCurve(d); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [fleetId, session.id]);
+  }, [fleetId, session.id, demo]);
 
-  const points = curve?.points?.filter((p) => p.kw != null) || [];
+  const demoCurve = useMemo(() => (demo ? getDemoCurve(session.id) : null), [demo, session.id]);
+  const shownCurve = demo ? demoCurve : curve;
+  const points = shownCurve?.points?.filter((p) => p.kw != null) || [];
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 16, paddingTop: 4 }}>
@@ -672,10 +715,10 @@ function SessionDetail({ session, fleetId, sys }) {
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>Charging power (kW) — hover for SoC</div>
         {error ? (
           <div style={{ color: C.red, fontSize: 12 }}>{error}</div>
-        ) : !curve ? (
+        ) : !shownCurve ? (
           <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div>
         ) : points.length < 2 ? (
-          <div style={{ color: C.muted, fontSize: 12 }}>{curve.note || 'Not enough power readings to draw a curve.'}</div>
+          <div style={{ color: C.muted, fontSize: 12 }}>{shownCurve.note || 'Not enough power readings to draw a curve.'}</div>
         ) : (
           <div style={{ height: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
