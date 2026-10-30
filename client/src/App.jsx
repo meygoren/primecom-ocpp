@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
-import { FleetProvider } from './contexts/FleetContext';
+import { FleetProvider, useFleet } from './contexts/FleetContext';
 import FleetAssets from './pages/FleetAssets';
 import Legal from './pages/Legal';
 import Customers from './pages/Customers';
@@ -30,6 +30,8 @@ import Schedules from './pages/Schedules';
 import FuelLog from './pages/FuelLog';
 import Expenses from './pages/Expenses';
 import TruckMap from './pages/TruckMap';
+import LocationDashboard from './pages/LocationDashboard';
+import Locations from './pages/Locations';
 
 function Layout({ children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -52,10 +54,13 @@ function PrivateRoute({ session, children }) {
 
 function HomeRoute({ session }) {
   const profile = useProfile();
+  const { isLocation } = useFleet();
   if (!session) return <Navigate to="/login" replace />;
   if (profile?.role === 'driver') {
     return <Layout><DriverDashboard /></Layout>;
   }
+  // Locations set to the energy dashboard (e.g. Swift) get their own view.
+  if (isLocation) return <Layout><LocationDashboard /></Layout>;
   return <Layout><Dashboard /></Layout>;
 }
 
@@ -78,7 +83,7 @@ export default function App() {
 
   return (
     <ProfileProvider session={session}>
-      <FleetProvider>
+      <FleetProvider session={session}>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={session ? <Navigate to="/" replace /> : <Login />} />
@@ -105,6 +110,7 @@ export default function App() {
           <Route path="/incidents" element={<PrivateRoute session={session}><Incidents /></PrivateRoute>} />
           <Route path="/legal" element={<PrivateRoute session={session}><Legal /></PrivateRoute>} />
           <Route path="/truck-map" element={<PrivateRoute session={session}><TruckMap /></PrivateRoute>} />
+          <Route path="/locations" element={<PrivateRoute session={session}><Locations /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

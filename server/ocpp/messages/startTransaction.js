@@ -1,4 +1,5 @@
 const supabase = require('../../db/supabase');
+const { recordSessionStart } = require('../../services/sessionStats');
 
 // --- Transaction ID generation -------------------------------------------
 //
@@ -88,6 +89,12 @@ async function persistStartTransaction(chargePointId, payload, transactionId, st
 
   if (error) {
     console.error(`[StartTransaction] DB error for ${chargePointId}:`, error.message);
+  } else {
+    // Meter start reading, battery MAC and first battery-system guess — used
+    // for the location energy dashboard and session summaries.
+    await recordSessionStart(chargePointId, transactionId, { meterStart: payload.meterStart, idTag }).catch((err) => {
+      console.error(`[StartTransaction] Session start details failed for ${chargePointId}:`, err.message);
+    });
   }
 
   // Update charger status to charging

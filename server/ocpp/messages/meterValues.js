@@ -1,4 +1,5 @@
 const supabase = require('../../db/supabase');
+const { updateRunningStats } = require('../../services/sessionStats');
 
 function isOnShift(sup) {
   const { schedule_days, schedule_start, schedule_end } = sup;
@@ -53,6 +54,14 @@ async function handleMeterValues(chargePointId, payload) {
     const { error } = await supabase.from('meter_values').insert(rows);
     if (error) {
       console.error(`[MeterValues] DB error for ${chargePointId}:`, error.message);
+    }
+
+    // Live session summary (kW peak/low/avg, SoC, battery system). Not awaited
+    // so it never delays the reply to the charger.
+    if (transactionId) {
+      updateRunningStats(chargePointId, transactionId, rows).catch((err) => {
+        console.error(`[MeterValues] Running stats failed for ${chargePointId}:`, err.message);
+      });
     }
   }
 

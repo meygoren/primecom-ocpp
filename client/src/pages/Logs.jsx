@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useFleet } from '../contexts/FleetContext';
 import { formatDateTime } from '../lib/time';
 
 export default function Logs() {
@@ -11,10 +12,22 @@ export default function Logs() {
   const [chargerId, setChargerId] = useState(initialChargerId);
   const [expanded, setExpanded] = useState(null);
 
+  // A location with its own dashboard (e.g. Swift) only sees its own chargers' logs.
+  const { fleet, isLocation } = useFleet();
+  const [scopeIds, setScopeIds] = useState(null);
+  useEffect(() => {
+    if (!isLocation) return; // scopeIds is ignored outside location mode
+    api.getChargers()
+      .then((list) => setScopeIds(list.filter((c) => c.fleet_id === fleet.id).map((c) => c.charger_id)))
+      .catch(() => setScopeIds([]));
+  }, [isLocation, fleet?.id]);
+
   async function load() {
+    if (isLocation && scopeIds === null) return; // wait for the location's charger list
     try {
       const params = { limit: 100 };
       if (chargerId.trim()) params.charger_id = chargerId.trim();
+      else if (isLocation) params.charger_ids = scopeIds.join(',');
       const data = await api.getLogs(params);
       setLogs(data);
     } catch (err) {
@@ -24,7 +37,7 @@ export default function Logs() {
     }
   }
 
-  useEffect(() => { load(); }, [chargerId]);
+  useEffect(() => { load(); }, [chargerId, scopeIds]);
 
   function dirColor(dir) {
     return dir === 'incoming' ? '#3b82f6' : '#47a141';
@@ -35,7 +48,9 @@ export default function Logs() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: '#f1f5f9' }}>OCPP Logs</h1>
-          <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>Raw message log — click a row to expand</div>
+          <div style={{ fontSize: 13, color: '#8892a4', marginTop: 4 }}>
+            Raw message log{isLocation ? ` for ${fleet.label} chargers` : ''} — click a row to expand
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <input

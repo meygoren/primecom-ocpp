@@ -1,38 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, CreditCard, Settings, Users, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, ChevronDown, ChevronLeft, ChevronRight, X, Wrench, UserSquare, ShieldAlert, Scale, MapPin } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Zap, ScrollText, Activity, Settings, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Receipt, ChevronDown, ChevronLeft, ChevronRight, X, Wrench, UserSquare, ShieldAlert, Scale, MapPin } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
-import { useFleet, FLEETS } from '../contexts/FleetContext';
+import { useFleet } from '../contexts/FleetContext';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-
-const ADMIN_OPERATOR_NAV = [
-  { to: '/',              icon: LayoutDashboard,   label: 'Dashboard',       settingKey: null },
-  { to: '/sessions',      icon: Zap,               label: 'Sessions',        settingKey: null },
-  { to: '/logs',          icon: ScrollText,         label: 'Logs',            settingKey: null },
-  { to: '/rfid',          icon: CreditCard,         label: 'RFID Tags',       settingKey: 'nav_rfid_tags' },
-  { to: '/charge-trucks', icon: Truck,              label: 'Charge Trucks',   settingKey: null },
-  { to: '/energy-forward',icon: Warehouse,          label: 'Energy Forward',  settingKey: null },
-  { to: '/truck-map',     icon: MapPin,             label: 'Truck Map',       settingKey: null },
-  { to: '/billing',       icon: DollarSign,         label: 'Billing',         settingKey: null },
-  { to: '/issues',        icon: AlertTriangle,      label: 'Issues',          settingKey: null, badge: true },
-  { to: '/vehicles',      icon: Car,                label: 'VINs',            settingKey: null },
-  { to: '/fleet-assets',  icon: Wrench,             label: 'Fleet & Assets',  settingKey: null },
-  { to: '/customers',     icon: UserSquare,         label: 'Customers',       settingKey: null },
-  { to: '/incidents',     icon: ShieldAlert,        label: 'Incidents',       settingKey: null },
-  { to: '/ocpp-config',   icon: SlidersHorizontal,  label: 'OCPP Config',     settingKey: null },
-  { to: '/export',        icon: Download,           label: 'Export Data',     settingKey: null },
-  { to: '/schedules',     icon: Calendar,           label: 'Schedules',       settingKey: null },
-  { to: '/fuel-log',      icon: Truck,              label: 'Fuel & Mileage',  settingKey: null },
-  { to: '/expenses',      icon: Receipt,            label: 'Expenses',        settingKey: null },
-  { to: '/settings',      icon: Settings,           label: 'Settings',        settingKey: null },
-];
-
-const ADMIN_ONLY_NAV = [
-  { to: '/accounts',   icon: Users,   label: 'Accounts',   settingKey: null },
-  { to: '/employees',  icon: Users2,  label: 'Employees',  settingKey: null },
-  { to: '/legal',      icon: Scale,   label: 'Legal',      settingKey: null },
-];
+import { ADMIN_OPERATOR_NAV, ADMIN_ONLY_NAV, LOCATIONS_NAV } from '../lib/navItems';
 
 const LAWYER_NAV = [
   { to: '/legal', icon: Scale, label: 'Legal', settingKey: null },
@@ -67,7 +40,7 @@ const DRIVER_NAV = [
   { to: '/expenses',      icon: Receipt,           label: 'Expenses',       settingKey: null },
 ];
 
-function getNavItems(role) {
+function getRoleNavItems(role) {
   if (role === 'admin') {
     return [...ADMIN_OPERATOR_NAV, ...ADMIN_ONLY_NAV].filter((item) => {
       if (!item.settingKey) return true;
@@ -84,6 +57,18 @@ function getNavItems(role) {
   if (role === 'driver') return DRIVER_NAV;
   if (role === 'lawyer') return LAWYER_NAV;
   return [];
+}
+
+// Applies the selected location's tab list (fleets.nav_tabs). null = all tabs.
+// Drivers and lawyers keep their own fixed menus.
+function getNavItems(role, fleet) {
+  let items = getRoleNavItems(role);
+  const tabs = fleet?.nav_tabs;
+  if (Array.isArray(tabs) && ['admin', 'operator', 'viewer'].includes(role)) {
+    items = items.filter((item) => tabs.includes(item.to));
+  }
+  if (role === 'admin') items = [...items, LOCATIONS_NAV];
+  return items;
 }
 
 const ROLE_LABELS = {
@@ -109,10 +94,31 @@ function useIsDesktop() {
   return isDesktop;
 }
 
+function FleetHint({ fleet }) {
+  if (fleet.dashboard === 'location' || fleet.charger_count > 0) {
+    return (
+      <span style={{ marginLeft: 'auto', fontSize: 9, color: '#6b7280' }}>
+        {fleet.charger_count ?? 0} charger{fleet.charger_count === 1 ? '' : 's'}
+      </span>
+    );
+  }
+  if (fleet.id === 'tower_mobility') return null;
+  return <span style={{ marginLeft: 'auto', fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Coming soon</span>;
+}
+
 function FleetSwitcher({ expanded }) {
-  const { fleet, selectFleet, fleets } = useFleet();
+  const { fleet: currentFleet, selectFleet: setFleet, fleets } = useFleet();
   const [open, setOpen] = useState(false);
   const ref = useRef();
+  const navigate = useNavigate();
+  const fleet = currentFleet || { id: '', label: 'Fleet', color: '#47a141' };
+
+  // Switching location lands on its dashboard so the user is never left on
+  // a tab the new location hides.
+  function selectFleet(id) {
+    setFleet(id);
+    navigate('/');
+  }
 
   useEffect(() => {
     function handler(e) {
@@ -177,9 +183,7 @@ function FleetSwitcher({ expanded }) {
               >
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
                 {f.label}
-                {f.id !== 'tower_mobility' && (
-                  <span style={{ marginLeft: 'auto', fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Coming soon</span>
-                )}
+                <FleetHint fleet={f} />
               </button>
             ))}
           </div>
@@ -251,9 +255,7 @@ function FleetSwitcher({ expanded }) {
             >
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
               {f.label}
-              {f.id !== 'tower_mobility' && (
-                <span style={{ marginLeft: 'auto', fontSize: 9, color: '#6b7280', fontStyle: 'italic' }}>Coming soon</span>
-              )}
+              <FleetHint fleet={f} />
             </button>
           ))}
         </div>
@@ -267,17 +269,18 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile = () => {} }
   const role = profile?.role;
   const isDesktop = useIsDesktop();
 
-  const [navItems,   setNavItems]   = useState(() => getNavItems(role));
+  const { fleet } = useFleet();
+  const [navItems,   setNavItems]   = useState(() => getNavItems(role, fleet));
   const [issueCount, setIssueCount] = useState(0);
   const [expanded, setExpanded] = useState(() => localStorage.getItem('sidebar_expanded') === 'true');
 
-  useEffect(() => { setNavItems(getNavItems(role)); }, [role]);
+  useEffect(() => { setNavItems(getNavItems(role, fleet)); }, [role, fleet]);
 
   useEffect(() => {
-    function onStorage() { setNavItems(getNavItems(role)); }
+    function onStorage() { setNavItems(getNavItems(role, fleet)); }
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [role]);
+  }, [role, fleet]);
 
   useEffect(() => {
     let cancelled = false;

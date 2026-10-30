@@ -241,6 +241,30 @@ export const api = {
   updateIncident: (id, body) => request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteIncident: (id) => request(`/api/incidents/${id}`, { method: 'DELETE' }),
 
+  // Locations (Fleet dropdown) + energy dashboard
+  getFleets: () => request('/api/fleets'),
+  createFleet: (body) => request('/api/fleets', { method: 'POST', body: JSON.stringify(body) }),
+  updateFleet: (id, body) => request(`/api/fleets/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteFleet: (id) => request(`/api/fleets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  setFleetChargers: (id, charger_ids) =>
+    request(`/api/fleets/${encodeURIComponent(id)}/chargers`, { method: 'PUT', body: JSON.stringify({ charger_ids }) }),
+  getFleetLive: (id) => request(`/api/fleets/${encodeURIComponent(id)}/live`),
+  getFleetSessions: (id, params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/api/fleets/${encodeURIComponent(id)}/sessions${q ? '?' + q : ''}`);
+  },
+  getSessionCurve: (fleetId, sessionId) =>
+    request(`/api/fleets/${encodeURIComponent(fleetId)}/sessions/${sessionId}/curve`),
+  setSessionBatterySystem: (sessionId, battery_system) =>
+    request(`/api/fleets/sessions/${sessionId}`, { method: 'PATCH', body: JSON.stringify({ battery_system }) }),
+  recalculateFleet: (id) => request(`/api/fleets/${encodeURIComponent(id)}/recalculate`, { method: 'POST' }),
+  getFleetTags: (id) => request(`/api/fleets/${encodeURIComponent(id)}/tags`),
+
+  // Battery systems (Primecom / SETEC)
+  getBatterySystems: () => request('/api/battery-systems'),
+  updateBatterySystem: (id, body) =>
+    request(`/api/battery-systems/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
   // Truck Map
   getTruckMapData: () => request('/api/truck-map/trucks'),
   postTruckLocation: (body) => request('/api/truck-map/location', { method: 'POST', body: JSON.stringify(body) }),
