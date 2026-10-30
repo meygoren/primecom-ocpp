@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Zap, ScrollText, Activity, Settings, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Receipt, ChevronDown, ChevronLeft, ChevronRight, X, Wrench, UserSquare, ShieldAlert, Scale, MapPin } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, Activity, Settings, BatteryCharging, LogOut, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Receipt, ChevronDown, ChevronLeft, ChevronRight, X, Wrench, UserSquare, ShieldAlert, Scale, MapPin, Battery } from 'lucide-react';
 import { useProfile } from '../contexts/ProfileContext';
 import { useFleet } from '../contexts/FleetContext';
 import { supabase } from '../lib/supabase';
@@ -15,6 +15,7 @@ const VIEWER_NAV = [
   { to: '/',              icon: LayoutDashboard,   label: 'Dashboard',       settingKey: null },
   { to: '/sessions',      icon: Zap,               label: 'Sessions',        settingKey: null },
   { to: '/logs',          icon: ScrollText,         label: 'Logs',            settingKey: null },
+  { to: '/bms',           icon: Battery,            label: 'BMS Reports',     settingKey: null },
   { to: '/charge-trucks', icon: Truck,              label: 'Charge Trucks',   settingKey: null },
   { to: '/energy-forward',icon: Warehouse,          label: 'Energy Forward',  settingKey: null },
   { to: '/truck-map',     icon: MapPin,             label: 'Truck Map',       settingKey: null },
