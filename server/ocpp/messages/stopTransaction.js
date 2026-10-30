@@ -1,4 +1,5 @@
 const supabase = require('../../db/supabase');
+const { finalizeSession } = require('../../services/sessionStats');
 
 // A session that dies this fast was not a normal unplug — it is the symptom
 // we chase when a charger charges fine standalone but stops seconds after
@@ -57,12 +58,16 @@ async function persistStopTransaction(chargePointId, payload, stopTime) {
   // Fetch session to calculate energy delivered
   const session = await fetchSessionWithRetry(chargePointId, transactionId);
 
-  // Calculate energy in kWh from meter values (Wh → kWh)
+  // Calculate energy in kWh from meter values (Wh → kWh).
+  // meterStop is the charger's meter reading, not the session total. When the
+  // StartTransaction meter reading was stored, subtract it; otherwise keep the
+  // original behavior (correct for chargers whose meter restarts at 0 per session).
   let energyKwh = null;
   if (session && meterStop != null) {
-    // meterStart is not stored directly but can be derived from meter_values
-    // For now we store the raw meterStop value; energy calc can be enriched later
-    energyKwh = meterStop / 1000;
+    const meterStart = session.meter_start_wh != null ? parseFloat(session.meter_start_wh) : null;
+    energyKwh = meterStart != null && meterStop >= meterStart
+      ? (meterStop - meterStart) / 1000
+      : meterStop / 1000;
   }
 
   // Flag sessions that ended almost as soon as they began — this is what a
@@ -90,6 +95,18 @@ async function persistStopTransaction(chargePointId, payload, stopTime) {
 
   if (updateError) {
     console.error(`[StopTransaction] Update error for ${chargePointId}:`, updateError.message);
+  }
+
+  // Final session summary: avg / peak / lowest kW, SoC, battery system.
+  if (session) {
+    await finalizeSession({
+      ...session,
+      stop_time: stopTime,
+      energy_kwh: energyKwh,
+      meter_stop_wh: meterStop != null ? meterStop : session.meter_stop_wh,
+    }).catch((err) => {
+      console.error(`[StopTransaction] Session summary failed for ${chargePointId}:`, err.message);
+    });
   }
 
   // Update charger status back to online

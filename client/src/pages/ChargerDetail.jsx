@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { useFleet } from '../contexts/FleetContext';
 import StatusBadge from '../components/StatusBadge';
 import CommandPanel from '../components/CommandPanel';
 import MeterChart from '../components/MeterChart';
@@ -44,6 +45,26 @@ export default function ChargerDetail() {
   const showNotesEdit = localStorage.getItem('settings_feat_notes_edit') !== 'false';
 
   const [activeSession, setActiveSession] = useState(null);
+
+  // Location (fleet) + battery system assignment
+  const { fleets, reloadFleets } = useFleet();
+  const [batterySystems, setBatterySystems] = useState([]);
+  const [assignMsg, setAssignMsg] = useState(null);
+
+  useEffect(() => {
+    api.getBatterySystems().then(setBatterySystems).catch(() => setBatterySystems([]));
+  }, []);
+
+  async function saveAssignment(field, value) {
+    setAssignMsg(null);
+    try {
+      const updated = await api.updateCharger(id, { [field]: value });
+      setCharger((prev) => ({ ...prev, ...updated }));
+      if (field === 'fleet_id') reloadFleets();
+    } catch (err) {
+      setAssignMsg(err.message);
+    }
+  }
 
   async function load() {
     try {
@@ -260,6 +281,26 @@ export default function ChargerDetail() {
                 onCancel={() => setEditingField(null)}
                 onFieldValueChange={setFieldValue}
               />
+
+              {/* Charging location + battery system */}
+              <SelectInfoCard
+                label="Charging Location"
+                value={charger.fleet_id || ''}
+                disabled={!showNotesEdit}
+                onChange={(v) => saveAssignment('fleet_id', v || null)}
+                options={[{ value: '', label: 'Not assigned' }, ...fleets.map((f) => ({ value: f.id, label: f.label }))]}
+              />
+              <SelectInfoCard
+                label="Battery System"
+                value={charger.battery_system || 'auto'}
+                disabled={!showNotesEdit || batterySystems.length === 0}
+                onChange={(v) => saveAssignment('battery_system', v)}
+                options={[
+                  { value: 'auto', label: 'Detect automatically (MAC / energy)' },
+                  ...batterySystems.map((b) => ({ value: b.id, label: `Always ${b.label} (${parseFloat(b.capacity_kwh)} kWh)` })),
+                ]}
+              />
+              {assignMsg && <div style={{ gridColumn: '1 / -1', color: '#ef4444', fontSize: 12 }}>{assignMsg}</div>}
 
               {/* Editable Notes */}
               <EditableInfoCard
@@ -807,6 +848,22 @@ function EditableInfoCard({ label, value, field, cols, editingField, fieldValue,
       ) : (
         <div style={{ fontSize: 14, color: '#f1f5f9', fontWeight: 500 }}>{value}</div>
       )}
+    </div>
+  );
+}
+
+function SelectInfoCard({ label, value, options, onChange, disabled }) {
+  return (
+    <div style={{ background: '#1a1d27', border: '1px solid #2e3347', borderRadius: 10, padding: '14px 18px' }}>
+      <div style={{ fontSize: 12, color: '#8892a4', marginBottom: 6 }}>{label}</div>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', background: '#0f1117', border: '1px solid #2e3347', borderRadius: 6, padding: '6px 8px', color: '#f1f5f9', fontSize: 14, cursor: disabled ? 'default' : 'pointer' }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
     </div>
   );
 }

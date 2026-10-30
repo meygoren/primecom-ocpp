@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
+import { useFleet } from '../contexts/FleetContext';
 
 const POWER_KEYWORDS = ['power', 'current', 'voltage', 'ampere', 'amp', 'watt', 'kw', 'limit', 'max', 'charging'];
 
@@ -24,9 +25,13 @@ export default function OcppConfig() {
   const [saveResult, setSaveResult] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // A location with its own dashboard (e.g. Swift) only lists its own chargers.
+  const { fleet, isLocation } = useFleet();
   useEffect(() => {
-    api.getChargers().then(setChargers).catch(() => {});
-  }, []);
+    api.getChargers()
+      .then((list) => setChargers(isLocation ? list.filter((c) => c.fleet_id === fleet.id) : list))
+      .catch(() => {});
+  }, [isLocation, fleet?.id]);
 
   async function loadConfig(chargerId) {
     if (!chargerId) return;
