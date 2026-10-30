@@ -265,6 +265,31 @@ export const api = {
   updateBatterySystem: (id, body) =>
     request(`/api/battery-systems/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
+  // BMS Reports (battery BMS log uploads + analysis)
+  getBmsReports: () => request('/api/bms/reports'),
+  getBmsReport: (id) => request(`/api/bms/reports/${id}`),
+  updateBmsReport: (id, body) => request(`/api/bms/reports/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBmsReport: (id) => request(`/api/bms/reports/${id}`, { method: 'DELETE' }),
+  getBmsSettings: () => request('/api/bms/settings'),
+  saveBmsSettings: (settings) => request('/api/bms/settings', { method: 'PUT', body: JSON.stringify({ settings }) }),
+  // Sends the .xlsx as the raw request body (not JSON) — BMS exports are large.
+  uploadBmsReport: async (file) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(`${BASE}/api/bms/reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-File-Name': encodeURIComponent(file.name),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
+
   // Truck Map
   getTruckMapData: () => request('/api/truck-map/trucks'),
   postTruckLocation: (body) => request('/api/truck-map/location', { method: 'POST', body: JSON.stringify(body) }),
