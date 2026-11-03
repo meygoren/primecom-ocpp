@@ -1,4 +1,4 @@
-import { LayoutDashboard, Zap, ScrollText, CreditCard, Settings, Users, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, Wrench, UserSquare, ShieldAlert, Scale, MapPin, Building2 } from 'lucide-react';
+import { LayoutDashboard, Zap, ScrollText, CreditCard, Settings, Users, Truck, Warehouse, DollarSign, AlertTriangle, SlidersHorizontal, Download, Car, Calendar, Users2, Receipt, Wrench, UserSquare, ShieldAlert, Scale, MapPin, Building2, Battery } from 'lucide-react';
 
 // Sidebar tabs. Shared with the Locations page, where each location picks
 // which of these tabs are shown while it is selected.
@@ -7,6 +7,7 @@ export const ADMIN_OPERATOR_NAV = [
   { to: '/',              icon: LayoutDashboard,   label: 'Dashboard',       settingKey: null },
   { to: '/sessions',      icon: Zap,               label: 'Sessions',        settingKey: null },
   { to: '/logs',          icon: ScrollText,         label: 'Logs',            settingKey: null },
+  { to: '/bms',           icon: Battery,            label: 'BMS Reports',     settingKey: null },
   { to: '/rfid',          icon: CreditCard,         label: 'RFID Tags',       settingKey: 'nav_rfid_tags' },
   { to: '/charge-trucks', icon: Truck,              label: 'Charge Trucks',   settingKey: null },
   { to: '/energy-forward',icon: Warehouse,          label: 'Energy Forward',  settingKey: null },

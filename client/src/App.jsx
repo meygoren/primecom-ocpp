@@ -32,6 +32,7 @@ import Expenses from './pages/Expenses';
 import TruckMap from './pages/TruckMap';
 import LocationDashboard from './pages/LocationDashboard';
 import Locations from './pages/Locations';
+import BmsReports from './pages/BmsReports';
 
 function Layout({ children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -111,6 +112,8 @@ export default function App() {
           <Route path="/legal" element={<PrivateRoute session={session}><Legal /></PrivateRoute>} />
           <Route path="/truck-map" element={<PrivateRoute session={session}><TruckMap /></PrivateRoute>} />
           <Route path="/locations" element={<PrivateRoute session={session}><Locations /></PrivateRoute>} />
+          <Route path="/bms" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
+          <Route path="/bms/:id" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
