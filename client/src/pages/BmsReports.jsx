@@ -202,7 +202,7 @@ function ReportList({ onOpenSettings, settingsError }) {
             borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 16,
           }}
         >
-          <Upload size={22} color={C.green} />
+          <Upload size={22} color={C.green} style={{ display: 'block', margin: '0 auto' }} />
           <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 8 }}>Drop BMS log files here, or click to choose</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>.xlsx export from the BMS platform. Several files at once is fine.</div>
           <input ref={inputRef} type="file" accept=".xlsx" multiple hidden onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} />

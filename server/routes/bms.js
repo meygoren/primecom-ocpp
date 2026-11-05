@@ -57,13 +57,15 @@ router.get('/reports', anyRole, async (_req, res) => {
 });
 
 // POST /api/bms/reports — upload one .xlsx file as the raw request body.
-// Headers: Content-Type: application/octet-stream, X-File-Name: original name
+// Query: ?name=<original file name>. Header: Content-Type: application/octet-stream
 router.post(
   '/reports',
   operatorUp,
   express.raw({ type: () => true, limit: '300mb' }),
   async (req, res) => {
-    const fileName = decodeURIComponent(req.get('x-file-name') || 'bms-log.xlsx');
+    // File name travels in the query string: a custom header would need its own
+    // CORS allowance, and the browser blocks the upload without one.
+    const fileName = String(req.query.name || decodeURIComponent(req.get('x-file-name') || '') || 'bms-log.xlsx');
     if (!Buffer.isBuffer(req.body) || req.body.length < 100) {
       return res.status(400).json({ error: 'No file received' });
     }
