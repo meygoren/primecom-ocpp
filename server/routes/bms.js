@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
 const requireRole = require('../middleware/requireRole');
-const { extractBmsLog, analyzeBmsLog, mergeSettings, DEFAULT_SETTINGS } = require('../services/bmsAnalyzer');
+const { extractBmsLog, analyzeBmsLog, mergeSettings, DEFAULT_SETTINGS, SUMMARY_VERSION } = require('../services/bmsAnalyzer');
+const { buildTrend } = require('../services/bmsTrend');
+const claude = require('../services/claude');
 
 // BMS Reports: upload a Primecom battery BMS log (.xlsx export from the
 // online BMS platform) and get a hard-coded analysis back — energy in/out,
@@ -24,6 +26,66 @@ async function loadSettings() {
 
 function toExtracted(row) {
   return { meta: row.meta || {}, data: row.data, cell_stats: row.cell_stats || [], temp_stats: row.temp_stats || [] };
+}
+
+// Every log for one battery up to (and including) `uptoIso`, oldest first,
+// as a day-by-day trend. Summaries written by older analysis code are
+// recomputed once so every point has the same fields.
+async function loadTrend(hwid, uptoIso, settings) {
+  if (!hwid) return null;
+  const { data: rows, error } = await supabase
+    .from('bms_reports')
+    .select('id, start_time, file_name, summary')
+    .eq('hwid', hwid)
+    .lte('start_time', uptoIso)
+    .order('start_time', { ascending: false })
+    .limit(120);
+  if (error) throw new Error(error.message);
+
+  for (const row of rows || []) {
+    if (row.summary?.summary_version === SUMMARY_VERSION) continue;
+    const { data: full } = await supabase.from('bms_reports').select('*').eq('id', row.id).single();
+    if (!full?.data) continue;
+    row.summary = analyzeBmsLog(toExtracted(full), settings).summary;
+    await supabase.from('bms_reports').update({ summary: row.summary }).eq('id', row.id);
+  }
+  return buildTrend([...(rows || [])].reverse());
+}
+
+// One report with its analysis (current settings), the previous log from the
+// same battery and the trend up to this log.
+async function loadFullReport(id) {
+  const { data: row, error } = await supabase.from('bms_reports').select('*').eq('id', id).single();
+  if (error || !row) {
+    const err = new Error('Report not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const settings = await loadSettings();
+  const analysis = analyzeBmsLog(toExtracted(row), settings);
+
+  // Keep the list view in step with the latest settings / analysis code.
+  if (JSON.stringify(row.summary) !== JSON.stringify(analysis.summary)) {
+    await supabase.from('bms_reports').update({ summary: analysis.summary }).eq('id', row.id);
+  }
+
+  let previous = null;
+  if (row.hwid) {
+    const { data: prev } = await supabase
+      .from('bms_reports')
+      .select('id, start_time, end_time, file_name, summary')
+      .eq('hwid', row.hwid)
+      .lt('start_time', row.start_time)
+      .order('start_time', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    previous = prev || null;
+  }
+
+  const trend = await loadTrend(row.hwid, row.start_time, settings);
+  const { data: _d, cell_stats: _c, temp_stats: _t, ...info } = row;
+  return { report: { ...info, summary: analysis.summary }, analysis, previous, trend };
 }
 
 // GET /api/bms/settings
@@ -139,38 +201,13 @@ router.post(
 );
 
 // GET /api/bms/reports/:id — full analysis, re-run with the current settings,
-// plus the previous report for the same battery for comparison.
+// plus the previous log and the trend for the same battery.
 router.get('/reports/:id', anyRole, async (req, res) => {
-  const { data: row, error } = await supabase.from('bms_reports').select('*').eq('id', req.params.id).single();
-  if (error || !row) return res.status(404).json({ error: 'Report not found' });
-
   try {
-    const settings = await loadSettings();
-    const analysis = analyzeBmsLog(toExtracted(row), settings);
-
-    // Keep the list view in step with the latest settings / analysis code.
-    if (JSON.stringify(row.summary) !== JSON.stringify(analysis.summary)) {
-      await supabase.from('bms_reports').update({ summary: analysis.summary }).eq('id', row.id);
-    }
-
-    let previous = null;
-    if (row.hwid) {
-      const { data: prev } = await supabase
-        .from('bms_reports')
-        .select('id, start_time, end_time, file_name, summary')
-        .eq('hwid', row.hwid)
-        .lt('start_time', row.start_time)
-        .order('start_time', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      previous = prev || null;
-    }
-
-    const { data: _d, cell_stats: _c, temp_stats: _t, ...info } = row;
-    res.json({ report: { ...info, summary: analysis.summary }, analysis, previous });
+    res.json(await loadFullReport(req.params.id));
   } catch (err) {
-    console.error('[BMS] Analysis failed:', err.message);
-    res.status(500).json({ error: err.message });
+    if (err.status !== 404) console.error('[BMS] Analysis failed:', err.message);
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -195,6 +232,252 @@ router.delete('/reports/:id', adminOnly, async (req, res) => {
   const { error } = await supabase.from('bms_reports').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+
+// --- readings export ---------------------------------------------------------
+
+const READING_COLUMNS = [
+  ['device_time', 'Device time', '设备时间'],
+  ['t', 'UTC time', 'UTC 时间'],
+  ['state', 'State (from current)', '状态（按电流）'],
+  ['soc', 'SOC (%)', 'SOC (%)'],
+  ['soh', 'SOH (%)', 'SOH (%)'],
+  ['v', 'Pack voltage (V)', '总电压 (V)'],
+  ['i', 'Current (A, − = discharge)', '电流 (A，负值=放电)'],
+  ['kw', 'Power (kW, − = discharge)', '功率 (kW，负值=放电)'],
+  ['max_cell_v', 'Highest cell (V)', '最高单体电压 (V)'],
+  ['max_cell_id', 'Highest cell #', '最高单体编号'],
+  ['min_cell_v', 'Lowest cell (V)', '最低单体电压 (V)'],
+  ['min_cell_id', 'Lowest cell #', '最低单体编号'],
+  ['cell_spread_v', 'Cell spread (V)', '压差 (V)'],
+  ['cell_avg_v', 'Average cell (V)', '平均单体电压 (V)'],
+  ['max_t', 'Hottest sensor (°C)', '最高温度 (°C)'],
+  ['max_t_id', 'Hottest sensor #', '最高温度探头编号'],
+  ['min_t', 'Coolest sensor (°C)', '最低温度 (°C)'],
+  ['min_t_id', 'Coolest sensor #', '最低温度探头编号'],
+  ['avg_t', 'Average temperature (°C)', '平均温度 (°C)'],
+  ['insul_kohm', 'Insulation (kΩ)', '绝缘电阻 (kΩ)'],
+  ['supply_v', '12 V supply (V)', '低压供电 (V)'],
+  ['balancing', 'Cells balancing', '均衡中的电芯数'],
+  ['chg_conn', 'Charging connection', '充电连接'],
+  ['chg_req_v', 'Charger requested V', '充电需求电压 (V)'],
+  ['chg_req_a', 'Charger requested A', '充电需求电流 (A)'],
+  ['chg_out_v', 'Charger output V', '充电机输出电压 (V)'],
+  ['chg_out_a', 'Charger output A', '充电机输出电流 (A)'],
+  ['chg_fault', 'Charger fault', '充电机故障'],
+  ['dchg_total_wh', 'Lifetime discharge (Wh)', '累计放电 (Wh)'],
+  ['chg_total_wh', 'Lifetime charge (Wh)', '累计充电 (Wh)'],
+  ['fault_code', 'Fault code', '故障码'],
+  ['fault_name', 'Fault name', '故障名称'],
+  ['fault_level', 'Fault level', '故障等级'],
+  ['snapshot', 'Fault snapshot', '故障快照'],
+];
+
+// GET /api/bms/reports/:id/readings.csv?lang=en|zh — every reading in the log
+router.get('/reports/:id/readings.csv', anyRole, async (req, res) => {
+  const zh = req.query.lang === 'zh';
+  const { data: row, error } = await supabase
+    .from('bms_reports')
+    .select('id, file_name, hwid, label, start_time, data')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !row?.data) return res.status(404).json({ error: 'Report not found' });
+
+  const d = row.data;
+  const settings = await loadSettings();
+  const idle = settings.events.idle_current_a;
+  const stateLabel = (i) => {
+    if (i == null || Math.abs(i) < idle) return zh ? '静置' : 'idle';
+    return i < 0 ? (zh ? '放电' : 'discharge') : (zh ? '充电' : 'charge');
+  };
+  const cell = (v) => {
+    if (v == null) return '';
+    const str = String(v);
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+
+  const lines = [READING_COLUMNS.map((c) => cell(zh ? c[2] : c[1])).join(',')];
+  for (let k = 0; k < d.t.length; k++) {
+    const values = READING_COLUMNS.map(([key]) => {
+      if (key === 't') return d.t[k] != null ? new Date(d.t[k]).toISOString().replace('T', ' ').slice(0, 19) : '';
+      if (key === 'kw') return d.v[k] != null && d.i[k] != null ? Math.round(d.v[k] * d.i[k]) / 1000 : '';
+      if (key === 'state') return stateLabel(d.i[k]);
+      return d[key]?.[k] ?? '';
+    });
+    lines.push(values.map(cell).join(','));
+  }
+
+  const base = (row.label || row.hwid || 'battery').replace(/[^\w.-]+/g, '_');
+  const day = row.start_time ? String(row.start_time).slice(0, 10) : 'log';
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${base}-${day}-readings${zh ? '-zh' : ''}.csv"`);
+  // BOM so Excel opens Chinese headers correctly.
+  res.send('﻿' + lines.join('\r\n'));
+});
+
+// --- trend -------------------------------------------------------------------
+
+// GET /api/bms/batteries/:hwid/trend — every log for this battery
+router.get('/batteries/:hwid/trend', anyRole, async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    res.json(await loadTrend(req.params.hwid, new Date(Date.now() + 86400000).toISOString(), settings));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Claude --------------------------------------------------------------------
+
+// GET /api/bms/ai-settings — whether a key is set (never the key itself)
+router.get('/ai-settings', anyRole, async (_req, res) => {
+  try {
+    const cfg = await claude.getAiConfig();
+    res.json({ configured: !!cfg.apiKey, source: cfg.source, key_hint: cfg.keyHint, model: cfg.model, models: claude.MODELS, updated_at: cfg.updatedAt, updated_by: cfg.updatedBy });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bms/ai-settings — body: { api_key?, clear_key?, model? } (admins)
+router.put('/ai-settings', adminOnly, async (req, res) => {
+  const updates = { updated_at: new Date().toISOString(), updated_by: req.user?.email || null };
+  const { api_key, clear_key, model } = req.body || {};
+
+  if (model !== undefined) {
+    if (!claude.MODELS.some((m) => m.id === model)) return res.status(400).json({ error: 'Unknown model' });
+    updates.model = model;
+  }
+  if (clear_key) updates.anthropic_api_key = null;
+  else if (api_key) {
+    const key = String(api_key).trim();
+    try {
+      await claude.verifyKey(key);
+    } catch (err) {
+      return res.status(400).json({ error: claude.describeError(err) });
+    }
+    updates.anthropic_api_key = key;
+  }
+
+  const { error } = await supabase.from('app_ai_settings').upsert({ id: 1, ...updates });
+  if (error) return res.status(500).json({ error: `${error.message} — ${claude.MIGRATION_HINT}` });
+
+  const cfg = await claude.getAiConfig();
+  res.json({ configured: !!cfg.apiKey, source: cfg.source, key_hint: cfg.keyHint, model: cfg.model, models: claude.MODELS });
+});
+
+async function requireClaude(res) {
+  const cfg = await claude.getAiConfig();
+  if (!cfg.apiKey) {
+    res.status(400).json({ error: 'No Anthropic API key yet. An admin can add one under Claude settings on the BMS Reports page.' });
+    return null;
+  }
+  return cfg;
+}
+
+// GET /api/bms/reports/:id/chat
+router.get('/reports/:id/chat', anyRole, async (req, res) => {
+  const { data, error } = await supabase
+    .from('bms_chat')
+    .select('id, role, content, author, model, created_at')
+    .eq('report_id', req.params.id)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: `${error.message} — ${claude.MIGRATION_HINT}` });
+  res.json(data);
+});
+
+// DELETE /api/bms/reports/:id/chat — start the conversation over
+router.delete('/reports/:id/chat', operatorUp, async (req, res) => {
+  const { error } = await supabase.from('bms_chat').delete().eq('report_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// POST /api/bms/reports/:id/chat — body: { message } → streams Claude's reply
+router.post('/reports/:id/chat', operatorUp, async (req, res) => {
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ error: 'Message is empty' });
+
+  try {
+    const cfg = await requireClaude(res);
+    if (!cfg) return;
+    const full = await loadFullReport(req.params.id);
+
+    const { data: history, error } = await supabase
+      .from('bms_chat')
+      .select('role, content')
+      .eq('report_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(`${error.message} — ${claude.MIGRATION_HINT}`);
+
+    const { error: insErr } = await supabase.from('bms_chat').insert({ report_id: req.params.id, role: 'user', content: message, author: req.user?.email || null });
+    if (insErr) throw new Error(insErr.message);
+
+    // The report data rides in the first user turn so it stays in the cached prefix.
+    const turns = [...(history || []), { role: 'user', content: message }];
+    const messages = turns.map((t, k) => ({
+      role: t.role,
+      content: k === 0
+        ? [{ type: 'text', text: `BMS report data (JSON):\n${claude.buildContext(full)}` }, { type: 'text', text: t.content }]
+        : t.content,
+    }));
+
+    await claude.streamReply(res, {
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      effort: 'medium',
+      system: claude.SYSTEM_PROMPT,
+      messages,
+      onDone: async (text, model) => {
+        await supabase.from('bms_chat').insert({ report_id: req.params.id, role: 'assistant', content: text, model });
+      },
+    });
+  } catch (err) {
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// POST /api/bms/reports/:id/analysis — body: { lang: 'en' | 'zh' } → streams
+// Claude's written review and saves it on the report.
+router.post('/reports/:id/analysis', operatorUp, async (req, res) => {
+  const lang = req.body?.lang === 'zh' ? 'zh' : 'en';
+  try {
+    const cfg = await requireClaude(res);
+    if (!cfg) return;
+    const full = await loadFullReport(req.params.id);
+
+    const { data: chat } = await supabase
+      .from('bms_chat')
+      .select('role, content')
+      .eq('report_id', req.params.id)
+      .order('created_at', { ascending: true });
+    const chatNote = chat?.length
+      ? `\n\nThe team has also discussed this report with you. Take that conversation into account:\n${chat.map((c) => `${c.role === 'user' ? 'Team' : 'Claude'}: ${c.content}`).join('\n\n')}`
+      : '';
+
+    await claude.streamReply(res, {
+      apiKey: cfg.apiKey,
+      model: cfg.model,
+      effort: 'high',
+      system: claude.SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: `BMS report data (JSON):\n${claude.buildContext(full)}` },
+          { type: 'text', text: claude.ANALYSIS_REQUEST[lang] + chatNote },
+        ],
+      }],
+      onDone: async (text, model) => {
+        const current = full.report.ai_analysis || {};
+        await supabase
+          .from('bms_reports')
+          .update({ ai_analysis: { ...current, [lang]: { text, model, at: new Date().toISOString() } } })
+          .eq('id', req.params.id);
+      },
+    });
+  } catch (err) {
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

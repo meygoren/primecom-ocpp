@@ -272,6 +272,48 @@ export const api = {
   deleteBmsReport: (id) => request(`/api/bms/reports/${id}`, { method: 'DELETE' }),
   getBmsSettings: () => request('/api/bms/settings'),
   saveBmsSettings: (settings) => request('/api/bms/settings', { method: 'PUT', body: JSON.stringify({ settings }) }),
+  getBmsTrend: (hwid) => request(`/api/bms/batteries/${encodeURIComponent(hwid)}/trend`),
+  getBmsChat: (id) => request(`/api/bms/reports/${id}/chat`),
+  clearBmsChat: (id) => request(`/api/bms/reports/${id}/chat`, { method: 'DELETE' }),
+  getAiSettings: () => request('/api/bms/ai-settings'),
+  saveAiSettings: (body) => request('/api/bms/ai-settings', { method: 'PUT', body: JSON.stringify(body) }),
+  downloadBmsReadings: (id, lang) => api.downloadExport(`/api/bms/reports/${id}/readings.csv?lang=${lang}`),
+  // POSTs and reads a Server-Sent Events reply from Claude. onEvent receives
+  // { type: 'delta', text } as text arrives, then { type: 'done' | 'error', ... }.
+  streamBms: async (path, body, onEvent) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let last = null;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const line = chunk.split('\n').find((l) => l.startsWith('data: '));
+        if (!line) continue;
+        last = JSON.parse(line.slice(6));
+        onEvent(last);
+      }
+    }
+    if (last?.type === 'error') throw new Error(last.error);
+    if (last?.type !== 'done') throw new Error('The connection closed before Claude finished. Try again.');
+    return last;
+  },
   // Sends the .xlsx as the raw request body (not JSON) — BMS exports are large.
   uploadBmsReport: async (file) => {
     const { data: { session } } = await supabase.auth.getSession();

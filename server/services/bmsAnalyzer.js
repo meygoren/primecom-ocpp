@@ -36,6 +36,10 @@ const DEFAULT_SETTINGS = {
     faults: true,
     gaps: true,
     comparison: true,
+    trend: true,
+    notes: true,
+    ai_analysis: true,
+    chat: true,
   },
   limits: {
     discharge_current_a: 990,   // BMS discharge current limit
@@ -72,6 +76,9 @@ const DEFAULT_SETTINGS = {
     min_event_kwh: 0.5,         // ignore blips
   },
 };
+
+// Bump when summary fields change, so stored summaries are recomputed for trends.
+const SUMMARY_VERSION = 2;
 
 function mergeSettings(saved) {
   const s = saved || {};
@@ -571,70 +578,93 @@ function analyzeBmsLog(extracted, savedSettings) {
   const balancingSamples = d.balancing.filter((b) => b > 0).length;
 
   // ---- warnings ----
+  // Each warning carries an English `message` (also used as Claude context)
+  // plus `p` (the numbers) and `at` (when / SOC / state), so the page can
+  // render it in any language from `key`.
   const warnings = [];
-  const warn = (level, key, message, detail = {}) => warnings.push({ level, key, message, ...detail });
+  const warn = (level, key, message, p = {}, k = null, t = null) => warnings.push({
+    level, key, message, p,
+    t: t ?? (k != null ? d.t[k] : null),
+    at: k != null ? { time: d.device_time[k], soc: d.soc[k], state: stateOf(k) } : null,
+  });
   const fmtT = (k) => (k == null ? '' : ` at ${d.device_time[k]} (SOC ${d.soc[k]}%, ${stateOf(k)})`);
 
   if (kMaxT != null) {
     const v = d.max_t[kMaxT];
-    if (v >= T.temp_crit_c) warn('critical', 'temp_high', `Cell temperature reached ${v}°C (critical ≥ ${T.temp_crit_c}°C)${fmtT(kMaxT)}`, { t: d.t[kMaxT] });
-    else if (v >= T.temp_warn_c) warn('warning', 'temp_high', `Cell temperature reached ${v}°C (warning ≥ ${T.temp_warn_c}°C)${fmtT(kMaxT)}`, { t: d.t[kMaxT] });
+    const lvl = v >= T.temp_crit_c ? 'critical' : v >= T.temp_warn_c ? 'warning' : null;
+    const lim = lvl === 'critical' ? T.temp_crit_c : T.temp_warn_c;
+    if (lvl) warn(lvl, 'temp_high', `Cell temperature reached ${v}°C (${lvl} ≥ ${lim}°C)${fmtT(kMaxT)}`, { value: v, limit: lim, sensor: d.max_t_id[kMaxT] }, kMaxT);
   }
   if (kTempSpread != null) {
     const v = d.max_t[kTempSpread] - d.min_t[kTempSpread];
-    if (v >= T.temp_spread_warn_c) warn('warning', 'temp_spread', `${v}°C difference between hottest and coolest sensor (warning ≥ ${T.temp_spread_warn_c}°C)${fmtT(kTempSpread)}`, { t: d.t[kTempSpread] });
+    if (v >= T.temp_spread_warn_c) warn('warning', 'temp_spread', `${v}°C difference between hottest and coolest sensor (warning ≥ ${T.temp_spread_warn_c}°C)${fmtT(kTempSpread)}`, { value: v, limit: T.temp_spread_warn_c }, kTempSpread);
   }
   for (const ev of events) {
     if (ev.temp_rise_c_per_min != null && ev.temp_rise_c_per_min >= T.temp_rise_warn_c_per_min) {
-      warn('warning', 'temp_rise', `Temperature rose ${ev.temp_rise_c}°C in ${ev.duration_min} min during ${ev.type} (${ev.temp_rise_c_per_min}°C/min)`, { t: ev.start });
+      warn('warning', 'temp_rise', `Temperature rose ${ev.temp_rise_c}°C in ${ev.duration_min} min during ${ev.type} (${ev.temp_rise_c_per_min}°C/min)`,
+        { rise: ev.temp_rise_c, minutes: ev.duration_min, rate: ev.temp_rise_c_per_min, type: ev.type }, null, ev.start);
     }
   }
   if (kSpread != null) {
     const v = d.cell_spread_v[kSpread];
     const lvl = v >= T.cell_spread_crit_v ? 'critical' : v >= T.cell_spread_warn_v ? 'warning' : null;
     if (lvl) {
-      const topOfCharge = d.soc[kSpread] >= 95 ? ' Near full charge, where LFP cell voltages naturally separate — check that balancing brings it back down.' : '';
-      warn(lvl, 'cell_spread', `Cell voltage spread reached ${round(v * 1000, 0)} mV${fmtT(kSpread)}.${topOfCharge}`, { t: d.t[kSpread] });
+      const topOfCharge = d.soc[kSpread] >= 95;
+      const note = topOfCharge ? ' Near full charge, where LFP cell voltages naturally separate — check that balancing brings it back down.' : '';
+      warn(lvl, 'cell_spread', `Cell voltage spread reached ${round(v * 1000, 0)} mV${fmtT(kSpread)}.${note}`, { mv: round(v * 1000, 0), top_of_charge: topOfCharge }, kSpread);
     }
   }
   if (kMaxCell != null) {
     const v = d.max_cell_v[kMaxCell];
-    if (v >= T.cell_high_crit_v) warn('critical', 'cell_high', `Cell #${d.max_cell_id[kMaxCell]} reached ${v} V (critical ≥ ${T.cell_high_crit_v} V)${fmtT(kMaxCell)}`, { t: d.t[kMaxCell] });
-    else if (v >= T.cell_high_warn_v) warn('warning', 'cell_high', `Cell #${d.max_cell_id[kMaxCell]} reached ${v} V (warning ≥ ${T.cell_high_warn_v} V)${fmtT(kMaxCell)}`, { t: d.t[kMaxCell] });
+    const lvl = v >= T.cell_high_crit_v ? 'critical' : v >= T.cell_high_warn_v ? 'warning' : null;
+    const lim = lvl === 'critical' ? T.cell_high_crit_v : T.cell_high_warn_v;
+    if (lvl) warn(lvl, 'cell_high', `Cell #${d.max_cell_id[kMaxCell]} reached ${v} V (${lvl} ≥ ${lim} V)${fmtT(kMaxCell)}`, { cell: d.max_cell_id[kMaxCell], value: v, limit: lim }, kMaxCell);
   }
   if (kMinCell != null) {
     const v = d.min_cell_v[kMinCell];
-    if (v <= T.cell_low_crit_v) warn('critical', 'cell_low', `Cell #${d.min_cell_id[kMinCell]} dropped to ${v} V (critical ≤ ${T.cell_low_crit_v} V)${fmtT(kMinCell)}`, { t: d.t[kMinCell] });
-    else if (v <= T.cell_low_warn_v) warn('warning', 'cell_low', `Cell #${d.min_cell_id[kMinCell]} dropped to ${v} V (warning ≤ ${T.cell_low_warn_v} V)${fmtT(kMinCell)}`, { t: d.t[kMinCell] });
+    const lvl = v <= T.cell_low_crit_v ? 'critical' : v <= T.cell_low_warn_v ? 'warning' : null;
+    const lim = lvl === 'critical' ? T.cell_low_crit_v : T.cell_low_warn_v;
+    if (lvl) warn(lvl, 'cell_low', `Cell #${d.min_cell_id[kMinCell]} dropped to ${v} V (${lvl} ≤ ${lim} V)${fmtT(kMinCell)}`, { cell: d.min_cell_id[kMinCell], value: v, limit: lim }, kMinCell);
   }
   const weakest = weakCells[0];
   if (weakest && weakest.lowest_pct >= 40 && weakest.avg_dev_mv <= -15) {
-    warn('info', 'weak_cell', `Cell #${weakest.n} is the lowest cell in ${weakest.lowest_pct}% of readings, averaging ${Math.abs(weakest.avg_dev_mv)} mV below the pack average. Watch it across reports.`);
+    warn('info', 'weak_cell', `Cell #${weakest.n} is the lowest cell in ${weakest.lowest_pct}% of readings, averaging ${Math.abs(weakest.avg_dev_mv)} mV below the pack average. Watch it across reports.`,
+      { cell: weakest.n, pct: weakest.lowest_pct, mv: Math.abs(weakest.avg_dev_mv) });
   }
   const hottest = hotSensors[0];
   if (hottest && hottest.hottest_pct >= 25 && hottest.avg_dev_c >= 3) {
-    warn('info', 'hot_spot', `Temperature sensor #${hottest.n} is the hottest in ${hottest.hottest_pct}% of readings, ${hottest.avg_dev_c}°C above average — possible cooling hot spot.`);
+    warn('info', 'hot_spot', `Temperature sensor #${hottest.n} is the hottest in ${hottest.hottest_pct}% of readings, ${hottest.avg_dev_c}°C above average — possible cooling hot spot.`,
+      { sensor: hottest.n, pct: hottest.hottest_pct, c: hottest.avg_dev_c });
   }
   for (const ev of dEvents) {
-    if (ev.minutes_at_current_limit >= 1) warn('info', 'current_limit', `Discharge ran at the ${L.discharge_current_a} A current limit for ${ev.minutes_at_current_limit} min (peak ${ev.peak_a} A, ${ev.peak_kw} kW).`, { t: ev.start });
-    if (ev.minutes_over_power_limit >= 1) warn('warning', 'over_power', `Discharge was above the ${L.system_kw} kW system rating for ${ev.minutes_over_power_limit} min (peak ${ev.peak_kw} kW).`, { t: ev.start });
+    if (ev.minutes_at_current_limit >= 1) warn('info', 'current_limit', `Discharge ran at the ${L.discharge_current_a} A current limit for ${ev.minutes_at_current_limit} min (peak ${ev.peak_a} A, ${ev.peak_kw} kW).`,
+      { limit: L.discharge_current_a, minutes: ev.minutes_at_current_limit, peak_a: ev.peak_a, peak_kw: ev.peak_kw }, null, ev.start);
+    if (ev.minutes_over_power_limit >= 1) warn('warning', 'over_power_discharge', `Discharge was above the ${L.system_kw} kW system rating for ${ev.minutes_over_power_limit} min (peak ${ev.peak_kw} kW).`,
+      { limit: L.system_kw, minutes: ev.minutes_over_power_limit, peak_kw: ev.peak_kw }, null, ev.start);
   }
   for (const ev of cEvents) {
-    if (ev.interruptions >= T.interruptions_warn) warn('warning', 'charge_interrupted', `Charging session starting ${ev.start_local} stopped and restarted ${ev.interruptions} times. Check the charger / OCPP logs for that window.`, { t: ev.start });
-    if (ev.delivered_vs_requested_pct != null && ev.delivered_vs_requested_pct < T.charger_shortfall_pct) warn('info', 'charger_shortfall', `Charger delivered ${ev.delivered_vs_requested_pct}% of the current the BMS requested (requested up to ${ev.requested_a} A, got peak ${ev.peak_a} A).`, { t: ev.start });
-    if (ev.minutes_over_power_limit >= 1) warn('warning', 'over_power', `Charging above the ${L.charger_kw} kW charger rating for ${ev.minutes_over_power_limit} min.`, { t: ev.start });
+    if (ev.interruptions >= T.interruptions_warn) warn('warning', 'charge_interrupted', `Charging session starting ${ev.start_local} stopped and restarted ${ev.interruptions} times. Check the charger / OCPP logs for that window.`,
+      { start: ev.start_local, count: ev.interruptions }, null, ev.start);
+    if (ev.delivered_vs_requested_pct != null && ev.delivered_vs_requested_pct < T.charger_shortfall_pct) warn('info', 'charger_shortfall', `Charger delivered ${ev.delivered_vs_requested_pct}% of the current the BMS requested (requested up to ${ev.requested_a} A, got peak ${ev.peak_a} A).`,
+      { pct: ev.delivered_vs_requested_pct, requested_a: ev.requested_a, peak_a: ev.peak_a }, null, ev.start);
+    if (ev.minutes_over_power_limit >= 1) warn('warning', 'over_power_charge', `Charging above the ${L.charger_kw} kW charger rating for ${ev.minutes_over_power_limit} min.`,
+      { limit: L.charger_kw, minutes: ev.minutes_over_power_limit }, null, ev.start);
   }
   if (insulOhmPerV != null) {
-    if (insulOhmPerV < T.insulation_crit_ohm_per_v) warn('critical', 'insulation', `Insulation resistance dropped to ${d.insul_kohm[kInsul]} kΩ (${insulOhmPerV} Ω/V, critical < ${T.insulation_crit_ohm_per_v} Ω/V)${fmtT(kInsul)}`, { t: d.t[kInsul] });
-    else if (insulOhmPerV < T.insulation_warn_ohm_per_v) warn('warning', 'insulation', `Insulation resistance dropped to ${d.insul_kohm[kInsul]} kΩ (${insulOhmPerV} Ω/V, warning < ${T.insulation_warn_ohm_per_v} Ω/V)${fmtT(kInsul)}`, { t: d.t[kInsul] });
+    const lvl = insulOhmPerV < T.insulation_crit_ohm_per_v ? 'critical' : insulOhmPerV < T.insulation_warn_ohm_per_v ? 'warning' : null;
+    const lim = lvl === 'critical' ? T.insulation_crit_ohm_per_v : T.insulation_warn_ohm_per_v;
+    if (lvl) warn(lvl, 'insulation', `Insulation resistance dropped to ${d.insul_kohm[kInsul]} kΩ (${insulOhmPerV} Ω/V, ${lvl} < ${lim} Ω/V)${fmtT(kInsul)}`,
+      { kohm: d.insul_kohm[kInsul], ohm_per_v: insulOhmPerV, limit: lim }, kInsul);
   }
-  if (kSupply != null && d.supply_v[kSupply] < T.supply_low_v) warn('warning', 'supply_low', `12 V supply dropped to ${round(d.supply_v[kSupply], 2)} V${fmtT(kSupply)}`, { t: d.t[kSupply] });
+  if (kSupply != null && d.supply_v[kSupply] < T.supply_low_v) warn('warning', 'supply_low', `12 V supply dropped to ${round(d.supply_v[kSupply], 2)} V${fmtT(kSupply)}`, { value: round(d.supply_v[kSupply], 2) }, kSupply);
   const sohNow = sohs.length ? sohs[sohs.length - 1] : null;
-  if (sohNow != null && sohNow < T.soh_warn_pct) warn('warning', 'soh', `State of health is ${sohNow}% (warning < ${T.soh_warn_pct}%)`);
-  if (socs.length && Math.min(...socs) <= T.soc_low_warn_pct) warn('warning', 'soc_low', `SOC dropped to ${Math.min(...socs)}% (warning ≤ ${T.soc_low_warn_pct}%)`);
-  for (const f of faults) warn(/3|high|severe|critical/i.test(f.level || '') ? 'critical' : 'warning', 'fault', `Fault: ${f.name || f.code}${f.level ? ` (level ${f.level})` : ''} — ${f.samples} reading${f.samples === 1 ? '' : 's'}`, { t: f.first_t });
-  if (snapshotRows) warn('warning', 'snapshot', `${snapshotRows} fault snapshot reading${snapshotRows === 1 ? '' : 's'} in this file (the BMS records these around a fault).`);
-  for (const g of gaps) warn('info', 'gap', `No data for ${g.minutes} min (SOC ${g.soc_before}% → ${g.soc_after}%). The battery was offline or not reporting.`, { t: g.from });
+  if (sohNow != null && sohNow < T.soh_warn_pct) warn('warning', 'soh', `State of health is ${sohNow}% (warning < ${T.soh_warn_pct}%)`, { value: sohNow, limit: T.soh_warn_pct });
+  if (socs.length && Math.min(...socs) <= T.soc_low_warn_pct) warn('warning', 'soc_low', `SOC dropped to ${Math.min(...socs)}% (warning ≤ ${T.soc_low_warn_pct}%)`, { value: Math.min(...socs), limit: T.soc_low_warn_pct });
+  for (const f of faults) warn(/3|high|severe|critical/i.test(f.level || '') ? 'critical' : 'warning', 'fault', `Fault: ${f.name || f.code}${f.level ? ` (level ${f.level})` : ''} — ${f.samples} reading${f.samples === 1 ? '' : 's'}`,
+    { name: f.name || f.code, level: f.level, count: f.samples }, null, f.first_t);
+  if (snapshotRows) warn('warning', 'snapshot', `${snapshotRows} fault snapshot reading${snapshotRows === 1 ? '' : 's'} in this file (the BMS records these around a fault).`, { count: snapshotRows });
+  for (const g of gaps) warn('info', 'gap', `No data for ${g.minutes} min (SOC ${g.soc_before}% → ${g.soc_after}%). The battery was offline or not reporting.`,
+    { minutes: g.minutes, soc_before: g.soc_before, soc_after: g.soc_after }, null, g.from);
 
   const order = { critical: 0, warning: 1, info: 2 };
   warnings.sort((a, b) => order[a.level] - order[b.level] || (a.t || 0) - (b.t || 0));
@@ -694,7 +724,12 @@ function analyzeBmsLog(extracted, savedSettings) {
     min_insulation_ohm_per_v: insulOhmPerV,
     min_supply_v: kSupply != null ? round(d.supply_v[kSupply], 2) : null,
     weakest_cell: weakest ? weakest.n : null,
+    weakest_cell_dev_mv: weakest ? weakest.avg_dev_mv : null,
     hottest_sensor: hottest ? hottest.n : null,
+    hottest_sensor_dev_c: hottest ? hottest.avg_dev_c : null,
+    balancing_pct: n ? round((balancingSamples / n) * 100, 1) : 0,
+    charge_restarts: cEvents.reduce((acc, e) => acc + e.interruptions, 0),
+    summary_version: SUMMARY_VERSION,
     vehicle_sessions_est: L.vehicle_session_kwh ? round(energy.discharge / L.vehicle_session_kwh, 1) : null,
     faults: faults.length,
     snapshot_rows: snapshotRows,
@@ -733,4 +768,4 @@ function analyzeBmsLog(extracted, savedSettings) {
   };
 }
 
-module.exports = { extractBmsLog, analyzeBmsLog, mergeSettings, DEFAULT_SETTINGS };
+module.exports = { extractBmsLog, analyzeBmsLog, mergeSettings, DEFAULT_SETTINGS, SUMMARY_VERSION };

@@ -1,0 +1,443 @@
+// English / Simplified Chinese text for BMS reports (screen and PDF export).
+// t(key, vars) fills {placeholders}. Missing Chinese strings fall back to English.
+
+const EN = {
+  // page
+  all_reports: 'All BMS reports',
+  analysis_settings: 'Analysis settings',
+  claude_settings: 'Claude settings',
+  export_pdf: 'Export PDF',
+  export_csv: 'Export readings (CSV)',
+  delete: 'Delete',
+  charging_vehicles: 'Charging vehicles:',
+  set_vehicle: 'Set vehicle',
+  name_battery: 'Name this battery',
+  battery_suffix: '{model} battery',
+  readings_every: '{n} readings every {s}s',
+  n_cells: '{n} cells',
+  n_temp_sensors: '{n} temp sensors',
+  file_line: 'File: {file} · uploaded {date}{by} · BMS software {sw}',
+  by: ' by {u}',
+  analyzing: 'Analyzing…',
+  bms_report: 'BMS Report',
+  generated: 'Generated {date}',
+  print_save: 'Print / Save as PDF',
+  print_hint: 'In the print dialog choose "Save as PDF". Turn on "Background graphics" if the page prints white.',
+
+  // levels / states
+  level_critical: 'Critical', level_warning: 'Warning', level_info: 'Info',
+  lw_critical: 'critical', lw_warning: 'warning',
+  state_idle: 'idle', state_charge: 'charge', state_discharge: 'discharge',
+  type_discharge: 'Discharge', type_charge: 'Charge',
+
+  // overview
+  overview: 'Overview',
+  energy_out: 'Energy out (discharge)',
+  energy_in: 'Energy in (charge)',
+  peak_output: 'Peak output',
+  peak_discharge_current: 'Peak discharge current',
+  peak_input: 'Peak input',
+  soc_range: 'SOC range',
+  soh: 'State of health',
+  cell_temp: 'Cell temperature',
+  max_cell_spread: 'Max cell spread',
+  warnings: 'Warnings',
+  n_sessions: '{n} sessions',
+  n_session: '{n} session',
+  avg_limit: 'avg {v} · limit {l} kW',
+  limit_a: 'limit {l} A',
+  avg_amps: 'avg {v} · {a}',
+  start_end: 'start {a} · end {b}',
+  max_spread: 'max spread {v}',
+  cells_range: 'cells {a}–{b}',
+  none: 'None',
+
+  // warnings
+  warnings_sub: 'What the analysis flagged in this log. Thresholds are in Analysis settings.',
+  warnings_none: 'Nothing flagged — everything stayed within the configured limits.',
+  w_at: ' at {time} (SOC {soc}%, {state})',
+  w_temp_high: 'Cell temperature reached {value}°C ({lw} ≥ {limit}°C)',
+  w_temp_spread: 'Hottest and coolest sensor differed by {value}°C (warning ≥ {limit}°C)',
+  w_temp_rise: 'Temperature rose {rise}°C in {minutes} min during {type} ({rate}°C/min)',
+  w_cell_spread: 'Cell voltage spread reached {mv} mV',
+  w_cell_spread_top: '. Near full charge, where LFP cell voltages naturally separate — check that balancing brings it back down.',
+  w_cell_high: 'Cell #{cell} reached {value} V ({lw} ≥ {limit} V)',
+  w_cell_low: 'Cell #{cell} dropped to {value} V ({lw} ≤ {limit} V)',
+  w_weak_cell: 'Cell #{cell} is the lowest cell in {pct}% of readings, averaging {mv} mV below the pack average. Watch it across reports.',
+  w_hot_spot: 'Temperature sensor #{sensor} is the hottest in {pct}% of readings, {c}°C above average — possible cooling hot spot.',
+  w_current_limit: 'Discharge ran at the {limit} A current limit for {minutes} min (peak {peak_a} A, {peak_kw} kW).',
+  w_over_power_discharge: 'Discharge was above the {limit} kW system rating for {minutes} min (peak {peak_kw} kW).',
+  w_over_power_charge: 'Charging above the {limit} kW charger rating for {minutes} min.',
+  w_charge_interrupted: 'Charging session starting {start} stopped and restarted {count} times. Check the charger / OCPP logs for that window.',
+  w_charger_shortfall: 'Charger delivered {pct}% of the current the BMS requested (requested up to {requested_a} A, got peak {peak_a} A).',
+  w_insulation: 'Insulation resistance dropped to {kohm} kΩ ({ohm_per_v} Ω/V, {lw} < {limit} Ω/V)',
+  w_supply_low: '12 V supply dropped to {value} V',
+  w_soh: 'State of health is {value}% (warning < {limit}%)',
+  w_soc_low: 'SOC dropped to {value}% (warning ≤ {limit}%)',
+  w_fault: 'Fault: {name} — {count} readings',
+  w_snapshot: '{count} fault snapshot readings in this file (the BMS records these around a fault).',
+  w_gap: 'No data for {minutes} min (SOC {soc_before}% → {soc_after}%). The battery was offline or not reporting.',
+
+  // comparison + metric names (also used by trend)
+  comparison: 'Compared with previous log',
+  comparison_sub: 'Previous log from this battery: {date}',
+  comparison_first: 'This is the first log uploaded for this battery. Upload more to see changes over time.',
+  this_log: 'This log', previous: 'Previous', change: 'Change',
+  open_previous: 'Open previous report',
+  m_discharge_kwh: 'Energy out',
+  m_charge_kwh: 'Energy in',
+  m_peak_discharge_kw: 'Peak output',
+  m_avg_discharge_kw: 'Average output',
+  m_avg_charge_kw: 'Average input',
+  m_peak_discharge_a: 'Peak discharge current',
+  m_max_temp_c: 'Max cell temperature',
+  m_max_temp_spread_c: 'Temperature spread',
+  m_max_cell_spread_mv: 'Max cell spread',
+  m_min_cell_v: 'Lowest cell',
+  m_soh: 'State of health',
+  m_min_insulation_kohm: 'Lowest insulation',
+  m_weakest_cell_dev_mv: 'Weakest cell vs pack',
+  m_charge_restarts: 'Charging restarts',
+
+  // trend
+  trend: 'Trend across logs',
+  trend_sub: 'Every log uploaded for this battery up to this one ({n} logs, {from} → {to}). Direction is the fitted change over the whole period.',
+  trend_one: 'Only one log so far for this battery. Upload a log every day to build the trend.',
+  metric: 'Metric', first: 'First', per_day: 'Per day', direction: 'Direction', vs_previous: 'vs previous',
+  dir_improving: 'Improving', dir_worsening: 'Worsening', dir_stable: 'Stable', dir_up: 'Up', dir_down: 'Down',
+  recurring_weak: 'Cell #{c} was the weakest cell in {n} of {of} logs.',
+  recurring_hot: 'Sensor #{s} was the hottest in {n} of {of} logs.',
+  energy_per_log: 'Energy per log (kWh)',
+  out: 'Out', in: 'In',
+
+  // sessions
+  sessions: 'Charge and discharge sessions',
+  sessions_sub: 'Discharge = battery feeding the DC-DC chargers (vehicles). Charge = AC-DC charger refilling the battery. Short pauses are joined into one session.',
+  sessions_none: 'No charging or discharging in this log.',
+  col_type: 'Type', col_start: 'Start', col_duration: 'Duration', col_energy: 'Energy', col_avg_kw: 'Avg kW', col_peak_kw: 'Peak kW',
+  col_avg_a: 'Avg A', col_peak_a: 'Peak A', col_soc: 'SOC', col_temp: 'Temp', col_min_cell: 'Min cell', col_spread: 'Spread', col_notes: 'Notes',
+  n_restarts: '{n} restarts', n_restart: '{n} restart',
+  at_limit: '{d} at {l} A limit',
+  over_kw: '{d} over {l} kW',
+  requested: 'requested {v} V / {a} A ({p} delivered)',
+  vehicle_charges: '≈ {n} vehicle charges',
+
+  // power
+  power_soc: 'Power and state of charge',
+  power_soc_sub: 'Power: above zero = charging the battery, below zero = discharging to vehicles.',
+  power_kw: 'Power (kW)', soc_pct: 'State of charge (%)', kw_rating: '{l} kW rating', power: 'Power',
+
+  // temperature
+  temperature: 'Temperature',
+  temperature_sub: 'Higher temperatures make the BMS reduce the allowed current, so output drops as the pack heats up.',
+  cell_temp_c: 'Cell temperature (°C)',
+  hottest_sensor: 'Hottest sensor', average: 'Average', coolest_sensor: 'Coolest sensor',
+  hottest_reading: 'Hottest reading', coolest_reading: 'Coolest reading',
+  on_sensor: '{v}°C on sensor #{s}',
+  largest_temp_spread: 'Largest temperature spread',
+  largest_temp_spread_sub: 'Hottest vs coolest sensor at the same moment',
+
+  // derating
+  derating: 'Temperature vs power',
+  derating_sub: 'Average power and current at each hottest-cell temperature. Falling bars at higher temperatures show thermal derating. SOC also affects current, so compare across several logs.',
+  discharging: 'Discharging', charging: 'Charging',
+  none_in_log: 'None in this log.',
+  col_readings: 'Readings',
+
+  // cells
+  cell_voltages: 'Cell voltages',
+  cell_voltages_sub: '{n} cells. A wide spread between the highest and lowest cell means the pack is out of balance.',
+  high_low_cell: 'Highest and lowest cell (V)',
+  highest_cell: 'Highest cell', lowest_cell: 'Lowest cell',
+  cell_spread_mv: 'Cell spread (mV)', spread: 'Spread',
+  v_cell: '{v} V (cell #{c})',
+  largest_spread: 'Largest spread',
+  balancing_active: 'Balancing active',
+  pct_readings: '{p}% of readings',
+  balancing_sub: 'BMS bleeding charge from high cells to even them out',
+
+  // outliers
+  outliers: 'Weak cells and hot spots',
+  outliers_sub: 'Cells that sit below the pack average and sensors that run hotter than the rest. A cell that keeps showing up here across reports is worth inspecting.',
+  lowest_cells: 'Lowest cells (vs pack average)',
+  col_cell: 'Cell', col_vs_pack: 'Avg vs pack', col_lowest_in: 'Lowest cell in', col_range: 'Range',
+  of_readings: '{p} of readings',
+  hottest_sensors: 'Hottest temperature sensors (vs pack average)',
+  col_sensor: 'Sensor', col_hottest_in: 'Hottest in', col_max: 'Max',
+
+  // vehicles
+  vehicles: 'Vehicles served',
+  vehicles_sub: 'Estimate from energy discharged ÷ {kwh} kWh per {veh} charge (set in Analysis settings). Several vehicles can charge at once from one discharge session.',
+  veh_charges: '≈ {veh} charges',
+  discharge_sessions: 'Discharge sessions', energy_delivered: 'Energy delivered', average_output: 'Average output',
+
+  // energy
+  lifetime: 'Lifetime energy',
+  lifetime_sub: "From the BMS's own lifetime counters. Period values are the counter change across this log, a cross-check on the calculated energy above.",
+  lifetime_dis: 'Lifetime discharged', lifetime_chg: 'Lifetime charged',
+  full_cycles: 'Equivalent full cycles', per_cycle: 'at {kwh} per cycle',
+  dis_counter: 'Discharged this log (counter)', chg_counter: 'Charged this log (counter)', calculated: 'calculated {v}',
+  chg_over_dis: 'Lifetime charge ÷ discharge', chg_over_dis_sub: 'Energy put in per kWh taken out',
+
+  // insulation
+  insulation: 'Insulation and 12 V supply',
+  insulation_sub: 'Insulation resistance between the high-voltage system and chassis. Warning below {w} Ω/V, critical below {c} Ω/V. 65,535 kΩ means "above the measurable range".',
+  lowest_insulation: 'Lowest insulation', above_range: 'Always above range',
+  lowest_supply: 'Lowest 12 V supply', warn_below: 'Warning below {v} V',
+
+  // faults
+  faults: 'Faults and snapshots',
+  faults_none: 'No fault codes, charger faults or fault snapshots in this log.',
+  snapshot_rows: '{n} fault-snapshot readings (the BMS records 10 s before and after a fault).',
+  col_fault: 'Fault', col_code: 'Code', col_level: 'Level', col_first_seen: 'First seen',
+
+  // gaps
+  gaps: 'Data gaps',
+  gaps_sub: 'Periods with no readings: the battery was powered down, out of signal, or not reporting.',
+  gaps_none: 'No gaps — the log is continuous.',
+  col_from: 'From', col_to: 'To', col_length: 'Length', col_soc_change: 'SOC before → after',
+
+  // notes / Claude
+  notes: 'Team notes',
+  notes_sub: 'Your observations about this log. Claude reads these when it analyzes the report.',
+  notes_none: 'No notes yet.',
+  edit: 'Edit', save: 'Save', cancel: 'Cancel',
+  ai: 'Claude analysis',
+  ai_sub: 'Written review by Claude, based on this report, the trend, team notes and the conversation below.',
+  ai_generate: 'Generate analysis', ai_regenerate: 'Regenerate',
+  ai_generated: 'Generated {date} · {model}',
+  ai_missing: 'No analysis in English yet.',
+  ai_writing: 'Claude is writing…',
+  ai_no_key: 'Add an Anthropic API key in Claude settings to use Claude.',
+  chat: 'Ask Claude',
+  chat_sub: 'Ask questions or share what you see — Claude has this report, the trend and your notes. The conversation is shared with the team.',
+  chat_placeholder: 'e.g. Why did the current drop after 20 minutes?',
+  send: 'Send', clear_chat: 'Clear conversation', thinking: 'Claude is thinking…', you: 'You',
+};
+
+const ZH = {
+  all_reports: '全部 BMS 报告',
+  analysis_settings: '分析设置',
+  claude_settings: 'Claude 设置',
+  export_pdf: '导出 PDF',
+  export_csv: '导出读数 (CSV)',
+  delete: '删除',
+  charging_vehicles: '充电车辆：',
+  set_vehicle: '设置车辆',
+  name_battery: '命名此电池',
+  battery_suffix: '{model} 电池',
+  readings_every: '{n} 条读数，每 {s} 秒一条',
+  n_cells: '{n} 个电芯',
+  n_temp_sensors: '{n} 个温度探头',
+  file_line: '文件：{file} · 上传于 {date}{by} · BMS 软件 {sw}',
+  by: '，上传人 {u}',
+  analyzing: '分析中…',
+  bms_report: 'BMS 报告',
+  generated: '生成于 {date}',
+  print_save: '打印 / 另存为 PDF',
+  print_hint: '在打印对话框中选择“另存为 PDF”。如打印结果为白底，请勾选“背景图形”。',
+
+  level_critical: '严重', level_warning: '警告', level_info: '提示',
+  lw_critical: '严重', lw_warning: '警告',
+  state_idle: '静置', state_charge: '充电', state_discharge: '放电',
+  type_discharge: '放电', type_charge: '充电',
+
+  overview: '概览',
+  energy_out: '放电量（输出）',
+  energy_in: '充电量（输入）',
+  peak_output: '峰值输出功率',
+  peak_discharge_current: '峰值放电电流',
+  peak_input: '峰值输入功率',
+  soc_range: 'SOC 范围',
+  soh: '健康度 (SOH)',
+  cell_temp: '电芯温度',
+  max_cell_spread: '最大单体压差',
+  warnings: '告警',
+  n_sessions: '{n} 次',
+  n_session: '{n} 次',
+  avg_limit: '平均 {v} · 限值 {l} kW',
+  limit_a: '限值 {l} A',
+  avg_amps: '平均 {v} · {a}',
+  start_end: '开始 {a} · 结束 {b}',
+  max_spread: '最大温差 {v}',
+  cells_range: '单体 {a}–{b}',
+  none: '无',
+
+  warnings_sub: '本日志中分析发现的问题。阈值可在“分析设置”中调整。',
+  warnings_none: '未发现问题 —— 所有数据均在设定限值内。',
+  w_at: '（{time}，SOC {soc}%，{state}）',
+  w_temp_high: '电芯温度达到 {value}°C（{lw}阈值 ≥ {limit}°C）',
+  w_temp_spread: '最高与最低温度探头相差 {value}°C（警告阈值 ≥ {limit}°C）',
+  w_temp_rise: '{type}过程中温度在 {minutes} 分钟内上升 {rise}°C（{rate}°C/分钟）',
+  w_cell_spread: '单体压差达到 {mv} mV',
+  w_cell_spread_top: '。接近满电时 LFP 电芯电压会自然拉开，请确认均衡能将其拉回。',
+  w_cell_high: '{cell} 号电芯电压达到 {value} V（{lw}阈值 ≥ {limit} V）',
+  w_cell_low: '{cell} 号电芯电压降至 {value} V（{lw}阈值 ≤ {limit} V）',
+  w_weak_cell: '{cell} 号电芯在 {pct}% 的读数中为最低电芯，平均比整包均值低 {mv} mV。请在后续报告中持续关注。',
+  w_hot_spot: '{sensor} 号温度探头在 {pct}% 的读数中温度最高，比平均值高 {c}°C —— 可能存在散热热点。',
+  w_current_limit: '放电在 {limit} A 电流限值下运行了 {minutes} 分钟（峰值 {peak_a} A，{peak_kw} kW）。',
+  w_over_power_discharge: '放电功率超过 {limit} kW 系统额定值 {minutes} 分钟（峰值 {peak_kw} kW）。',
+  w_over_power_charge: '充电功率超过 {limit} kW 充电机额定值 {minutes} 分钟。',
+  w_charge_interrupted: '{start} 开始的充电过程中断并重启了 {count} 次。请检查该时段的充电机 / OCPP 日志。',
+  w_charger_shortfall: '充电机仅提供了 BMS 需求电流的 {pct}%（需求最高 {requested_a} A，实际峰值 {peak_a} A）。',
+  w_insulation: '绝缘电阻降至 {kohm} kΩ（{ohm_per_v} Ω/V，{lw}阈值 < {limit} Ω/V）',
+  w_supply_low: '低压（12 V）供电降至 {value} V',
+  w_soh: '健康度为 {value}%（警告阈值 < {limit}%）',
+  w_soc_low: 'SOC 降至 {value}%（警告阈值 ≤ {limit}%）',
+  w_fault: '故障：{name} —— {count} 条读数',
+  w_snapshot: '本文件包含 {count} 条故障快照读数（BMS 在故障前后记录）。',
+  w_gap: '{minutes} 分钟无数据（SOC {soc_before}% → {soc_after}%）。电池离线或未上报。',
+
+  comparison: '与上一份日志对比',
+  comparison_sub: '该电池上一份日志：{date}',
+  comparison_first: '这是该电池上传的第一份日志。上传更多日志即可查看变化。',
+  this_log: '本日志', previous: '上一份', change: '变化',
+  open_previous: '打开上一份报告',
+  m_discharge_kwh: '放电量',
+  m_charge_kwh: '充电量',
+  m_peak_discharge_kw: '峰值输出功率',
+  m_avg_discharge_kw: '平均输出功率',
+  m_avg_charge_kw: '平均输入功率',
+  m_peak_discharge_a: '峰值放电电流',
+  m_max_temp_c: '最高电芯温度',
+  m_max_temp_spread_c: '温差',
+  m_max_cell_spread_mv: '最大单体压差',
+  m_min_cell_v: '最低单体电压',
+  m_soh: '健康度',
+  m_min_insulation_kohm: '最低绝缘电阻',
+  m_weakest_cell_dev_mv: '最弱电芯偏差',
+  m_charge_restarts: '充电中断次数',
+
+  trend: '多日趋势',
+  trend_sub: '该电池截至本日志上传的所有日志（共 {n} 份，{from} → {to}）。方向按整个时段的拟合变化判断。',
+  trend_one: '该电池目前只有一份日志。每天上传日志即可形成趋势。',
+  metric: '指标', first: '首份', per_day: '每天', direction: '方向', vs_previous: '较上一份',
+  dir_improving: '改善', dir_worsening: '恶化', dir_stable: '稳定', dir_up: '上升', dir_down: '下降',
+  recurring_weak: '{c} 号电芯在 {of} 份日志中有 {n} 份为最弱电芯。',
+  recurring_hot: '{s} 号探头在 {of} 份日志中有 {n} 份温度最高。',
+  energy_per_log: '每份日志能量 (kWh)',
+  out: '放电', in: '充电',
+
+  sessions: '充放电过程',
+  sessions_sub: '放电 = 电池通过 DC-DC 充电机为车辆充电。充电 = AC-DC 充电机为电池补电。短暂停顿会合并为同一过程。',
+  sessions_none: '本日志中没有充放电。',
+  col_type: '类型', col_start: '开始', col_duration: '时长', col_energy: '能量', col_avg_kw: '平均 kW', col_peak_kw: '峰值 kW',
+  col_avg_a: '平均 A', col_peak_a: '峰值 A', col_soc: 'SOC', col_temp: '温度', col_min_cell: '最低单体', col_spread: '压差', col_notes: '备注',
+  n_restarts: '中断 {n} 次', n_restart: '中断 {n} 次',
+  at_limit: '{d} 处于 {l} A 限值',
+  over_kw: '{d} 超过 {l} kW',
+  requested: '需求 {v} V / {a} A（实际达到 {p}）',
+  vehicle_charges: '约 {n} 次车辆充电',
+
+  power_soc: '功率与荷电状态',
+  power_soc_sub: '功率：大于零 = 电池充电，小于零 = 向车辆放电。',
+  power_kw: '功率 (kW)', soc_pct: '荷电状态 SOC (%)', kw_rating: '{l} kW 额定', power: '功率',
+
+  temperature: '温度',
+  temperature_sub: '温度升高时 BMS 会降低允许电流，因此电池升温后输出功率会下降。',
+  cell_temp_c: '电芯温度 (°C)',
+  hottest_sensor: '最高温度探头', average: '平均', coolest_sensor: '最低温度探头',
+  hottest_reading: '最高温度', coolest_reading: '最低温度',
+  on_sensor: '{s} 号探头 {v}°C',
+  largest_temp_spread: '最大温差',
+  largest_temp_spread_sub: '同一时刻最高与最低探头之差',
+
+  derating: '温度与功率',
+  derating_sub: '不同最高电芯温度下的平均功率和电流。温度越高柱状越低，即为热降额。SOC 也会影响电流，请结合多份日志对比。',
+  discharging: '放电', charging: '充电',
+  none_in_log: '本日志中没有。',
+  col_readings: '读数',
+
+  cell_voltages: '单体电压',
+  cell_voltages_sub: '共 {n} 个电芯。最高与最低单体电压差越大，说明电池一致性越差。',
+  high_low_cell: '最高与最低单体电压 (V)',
+  highest_cell: '最高单体', lowest_cell: '最低单体',
+  cell_spread_mv: '压差 (mV)', spread: '压差',
+  v_cell: '{v} V（{c} 号电芯）',
+  largest_spread: '最大压差',
+  balancing_active: '均衡开启',
+  pct_readings: '{p}% 的读数',
+  balancing_sub: 'BMS 对高电压电芯放电以实现均衡',
+
+  outliers: '弱电芯与热点',
+  outliers_sub: '低于整包均值的电芯及温度偏高的探头。若某电芯在多份报告中反复出现，建议检查。',
+  lowest_cells: '最低电芯（相对整包均值）',
+  col_cell: '电芯', col_vs_pack: '相对均值', col_lowest_in: '为最低电芯的比例', col_range: '范围',
+  of_readings: '{p} 的读数',
+  hottest_sensors: '最热温度探头（相对整包均值）',
+  col_sensor: '探头', col_hottest_in: '为最高温度的比例', col_max: '最高',
+
+  vehicles: '服务车辆',
+  vehicles_sub: '估算方法：放电量 ÷ 每辆 {veh} 充电 {kwh} kWh（可在分析设置中修改）。一次放电过程可同时为多辆车充电。',
+  veh_charges: '约 {veh} 充电次数',
+  discharge_sessions: '放电次数', energy_delivered: '输出能量', average_output: '平均输出功率',
+
+  lifetime: '累计能量',
+  lifetime_sub: '来自 BMS 自带的累计计数器。本期数值为计数器在本日志中的变化，可与上方计算的能量相互校验。',
+  lifetime_dis: '累计放电', lifetime_chg: '累计充电',
+  full_cycles: '等效满循环次数', per_cycle: '按每循环 {kwh} 计',
+  dis_counter: '本日志放电（计数器）', chg_counter: '本日志充电（计数器）', calculated: '计算值 {v}',
+  chg_over_dis: '累计充电 ÷ 放电', chg_over_dis_sub: '每输出 1 kWh 所需充入的能量',
+
+  insulation: '绝缘与低压供电',
+  insulation_sub: '高压系统与车身之间的绝缘电阻。低于 {w} Ω/V 为警告，低于 {c} Ω/V 为严重。65,535 kΩ 表示“超出测量范围”。',
+  lowest_insulation: '最低绝缘电阻', above_range: '始终超出测量范围',
+  lowest_supply: '最低低压供电', warn_below: '低于 {v} V 告警',
+
+  faults: '故障与快照',
+  faults_none: '本日志中没有故障码、充电机故障或故障快照。',
+  snapshot_rows: '{n} 条故障快照读数（BMS 记录故障前后各 10 秒）。',
+  col_fault: '故障', col_code: '代码', col_level: '等级', col_first_seen: '首次出现',
+
+  gaps: '数据中断',
+  gaps_sub: '无读数的时段：电池断电、无信号或未上报。',
+  gaps_none: '无中断 —— 日志连续。',
+  col_from: '开始', col_to: '结束', col_length: '时长', col_soc_change: '前后 SOC',
+
+  notes: '团队备注',
+  notes_sub: '团队对本日志的观察。Claude 分析报告时会参考这些备注。',
+  notes_none: '暂无备注。',
+  edit: '编辑', save: '保存', cancel: '取消',
+  ai: 'Claude 分析',
+  ai_sub: '由 Claude 根据本报告、趋势、团队备注及下方对话撰写的分析。',
+  ai_generate: '生成分析', ai_regenerate: '重新生成',
+  ai_generated: '生成于 {date} · {model}',
+  ai_missing: '尚未生成中文分析。',
+  ai_writing: 'Claude 正在撰写…',
+  ai_no_key: '请先在 Claude 设置中添加 Anthropic API 密钥。',
+  chat: '询问 Claude',
+  chat_sub: '提出问题或分享您的观察 —— Claude 已掌握本报告、趋势和团队备注。对话对团队成员可见。',
+  chat_placeholder: '例如：为什么 20 分钟后电流下降了？',
+  send: '发送', clear_chat: '清空对话', thinking: 'Claude 正在思考…', you: '您',
+};
+
+const DICTS = { en: EN, zh: ZH };
+
+function fill(str, vars) {
+  return String(str).replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? vars[k] : `{${k}}`));
+}
+
+export function makeT(lang) {
+  const dict = DICTS[lang] || EN;
+  return (key, vars) => fill(dict[key] ?? EN[key] ?? key, vars);
+}
+
+export function locale(lang) {
+  return lang === 'zh' ? 'zh-CN' : undefined;
+}
+
+// Renders a warning from its key + params; falls back to the English message.
+export function warningText(w, t) {
+  const p = w.p || {};
+  const vars = {
+    ...p,
+    lw: t(`lw_${w.level}`),
+    type: p.type ? t(`state_${p.type}`) : '',
+  };
+  const tmpl = `w_${w.key}`;
+  let text = t(tmpl, vars);
+  if (text === tmpl) return w.message; // unknown key (older report)
+  if (w.at) text += t('w_at', { time: w.at.time, soc: w.at.soc, state: t(`state_${w.at.state}`) });
+  if (w.key === 'cell_spread' && p.top_of_charge) text += t('w_cell_spread_top');
+  return text;
+}
