@@ -276,11 +276,10 @@ export const api = {
   uploadBmsReport: async (file) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
-    const res = await fetch(`${BASE}/api/bms/reports`, {
+    const res = await fetch(`${BASE}/api/bms/reports?name=${encodeURIComponent(file.name)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/octet-stream',
-        'X-File-Name': encodeURIComponent(file.name),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: file,
