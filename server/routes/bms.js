@@ -480,4 +480,101 @@ router.post('/reports/:id/analysis', operatorUp, async (req, res) => {
   }
 });
 
+// --- page change requests ------------------------------------------------------
+
+const REQUESTS_HINT = 'run supabase_migration_bms_requests.sql in the Supabase SQL editor';
+
+// GET /api/bms/requests
+router.get('/requests', anyRole, async (_req, res) => {
+  const { data, error } = await supabase
+    .from('bms_change_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
+  res.json(data);
+});
+
+// Asks Claude to read a request and stores the result on it. Never throws:
+// the request stays saved when Claude is unavailable.
+async function interpretAndStore(row) {
+  const cfg = await claude.getAiConfig();
+  if (!cfg.apiKey) return { ...row, ai_error: 'No Anthropic API key yet — the request is saved, but Claude has not read it.' };
+  try {
+    const settings = await loadSettings();
+    const ai = await claude.interpretRequest({ apiKey: cfg.apiKey, model: cfg.model, text: row.request, settings });
+    const { data } = await supabase.from('bms_change_requests').update({ ai }).eq('id', row.id).select().single();
+    return data || { ...row, ai };
+  } catch (err) {
+    console.error('[BMS] Request interpretation failed:', err.message);
+    return { ...row, ai_error: claude.describeError(err) };
+  }
+}
+
+// POST /api/bms/requests — body: { request }. Anyone signed in can ask.
+router.post('/requests', anyRole, async (req, res) => {
+  const text = String(req.body?.request || '').trim();
+  if (!text) return res.status(400).json({ error: 'Describe the change you want' });
+  const { data: row, error } = await supabase
+    .from('bms_change_requests')
+    .insert({ request: text.slice(0, 8000), author: req.user?.email || null, status: 'open' })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
+  res.json(await interpretAndStore(row));
+});
+
+// POST /api/bms/requests/:id/interpret — ask Claude again
+router.post('/requests/:id/interpret', operatorUp, async (req, res) => {
+  const { data: row, error } = await supabase.from('bms_change_requests').select('*').eq('id', req.params.id).single();
+  if (error || !row) return res.status(404).json({ error: 'Request not found' });
+  res.json(await interpretAndStore(row));
+});
+
+// POST /api/bms/requests/:id/apply — apply Claude's proposed settings changes
+router.post('/requests/:id/apply', operatorUp, async (req, res) => {
+  const { data: row, error } = await supabase.from('bms_change_requests').select('*').eq('id', req.params.id).single();
+  if (error || !row) return res.status(404).json({ error: 'Request not found' });
+  const changes = row.ai?.settings_changes || [];
+  if (!changes.length) return res.status(400).json({ error: 'This request has no settings changes to apply' });
+
+  try {
+    const settings = await loadSettings();
+    for (const c of changes) {
+      if (settings[c.group] && c.key in settings[c.group]) settings[c.group][c.key] = c.value;
+    }
+    const merged = mergeSettings(settings);
+    const { error: sErr } = await supabase.from('bms_settings').upsert({ id: 1, settings: merged, updated_at: new Date().toISOString() });
+    if (sErr) throw new Error(sErr.message);
+
+    // A settings-only request is finished once applied.
+    const nextStatus = row.ai?.kind === 'settings' ? 'done' : row.status;
+    const { data } = await supabase
+      .from('bms_change_requests')
+      .update({ applied_at: new Date().toISOString(), applied_by: req.user?.email || null, status: nextStatus })
+      .eq('id', row.id)
+      .select()
+      .single();
+    res.json({ request: data, settings: merged });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/bms/requests/:id — body: { status }
+router.patch('/requests/:id', operatorUp, async (req, res) => {
+  const status = req.body?.status;
+  if (!['open', 'in_progress', 'done', 'declined'].includes(status)) return res.status(400).json({ error: 'Unknown status' });
+  const { data, error } = await supabase.from('bms_change_requests').update({ status }).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/bms/requests/:id
+router.delete('/requests/:id', adminOnly, async (req, res) => {
+  const { error } = await supabase.from('bms_change_requests').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 module.exports = router;

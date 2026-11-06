@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Sparkles, Send, Trash2, Pencil, X, KeyRound } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Section, Markdown } from './BmsSections';
-import { C, btnStyle, linkBtn, fmtDate, useReport } from '../../lib/bmsUi';
+import { C, btnStyle, linkBtn, fmtDate, useReport, joinText } from '../../lib/bmsUi';
+import { DictationButton } from './Dictation';
 
 // Team notes, Claude's written analysis and the Claude chat for one BMS report.
 
 export function TeamNotes({ report, canEdit, onSaved }) {
-  const { t } = useReport();
+  const { t, lang } = useReport();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(report.notes || '');
   const [err, setErr] = useState(null);
@@ -35,7 +36,10 @@ export function TeamNotes({ report, canEdit, onSaved }) {
     >
       {editing ? (
         <>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} autoFocus style={textareaStyle} />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} autoFocus style={{ ...textareaStyle, flex: 1 }} />
+            <DictationButton lang={lang} onText={(chunk) => setText((v) => joinText(v, chunk))} />
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
             <button onClick={save} style={btnStyle(true)}>{t('save')}</button>
             <button onClick={() => setEditing(false)} style={btnStyle()}>{t('cancel')}</button>
@@ -172,6 +176,7 @@ export function ClaudeChat({ reportId, aiReady, canEdit }) {
             rows={2}
             style={{ ...textareaStyle, flex: 1 }}
           />
+          <DictationButton lang={lang} onText={(chunk) => setInput((v) => joinText(v, chunk))} />
           <button onClick={send} disabled={!input.trim() || streaming !== null} style={{ ...btnStyle(true), height: 40 }}>
             <Send size={14} /> {t('send')}
           </button>

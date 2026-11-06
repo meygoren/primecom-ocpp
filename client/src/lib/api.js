@@ -314,6 +314,13 @@ export const api = {
     if (last?.type !== 'done') throw new Error('The connection closed before Claude finished. Try again.');
     return last;
   },
+  // Page change requests (customization requests read by Claude)
+  getBmsRequests: () => request('/api/bms/requests'),
+  createBmsRequest: (text) => request('/api/bms/requests', { method: 'POST', body: JSON.stringify({ request: text }) }),
+  interpretBmsRequest: (id) => request(`/api/bms/requests/${id}/interpret`, { method: 'POST' }),
+  applyBmsRequest: (id) => request(`/api/bms/requests/${id}/apply`, { method: 'POST' }),
+  updateBmsRequest: (id, body) => request(`/api/bms/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBmsRequest: (id) => request(`/api/bms/requests/${id}`, { method: 'DELETE' }),
   // Sends the .xlsx as the raw request body (not JSON) — BMS exports are large.
   uploadBmsReport: async (file) => {
     const { data: { session } } = await supabase.auth.getSession();

@@ -180,7 +180,117 @@ async function streamReply(res, { apiKey, model, effort, system, messages, onDon
   }
 }
 
+// --- page change requests -----------------------------------------------------
+
+// What each analysis-settings group means. Claude sees these with the
+// current values to decide whether a request can be met without code.
+const SETTING_NOTES = {
+  sections: 'true/false — which sections of the report page and PDF are shown',
+  limits: 'numbers (vehicle_name is text) — system limits used by the analysis',
+  thresholds: 'numbers — warning / critical thresholds',
+  events: 'numbers — how charge/discharge sessions are detected',
+};
+
+const REQUEST_SYSTEM_PROMPT = `You triage change requests from the Primecom operations team about their BMS Reports page (part of their internal OCPP dashboard for EV chargers and battery systems).
+
+The page: users upload daily .xlsx logs exported from the online BMS of a Primecom mobile battery system (~456 kWh, 432 cells, 144 temperature sensors). Server code analyzes each log into sections: overview tiles, warnings, comparison with the previous log, trend across logs, team notes, Claude analysis, Ask Claude chat, charge/discharge sessions table, power and SOC charts, temperature chart, temperature vs power bands, cell voltage charts, weak cells and hot spots, vehicles served, lifetime energy, insulation and 12 V supply, faults, data gaps. Reports can be shown and exported to PDF in English or Chinese, and every reading can be exported to CSV.
+
+Some requests can be met just by changing the page's analysis settings (listed in the request with their current values). Everything else — new charts, new columns or parameters, layout, wording, new calculations, new exports, new integrations — needs a code change by a developer.
+
+For each request:
+- kind: "settings" if settings changes alone satisfy it, "code" if it needs development work, "both" if settings help now but code is needed for the rest, "question" if it is too unclear to act on.
+- settings_changes: only keys that exist in the current settings, with the new value as a string (e.g. "true", "50", "Hyundai Ioniq 5"). Empty when none apply.
+- code_spec: for code work, a clear spec a developer can implement: what to change, where on the page, what data it uses (say if the BMS export may not contain it), and how to check it is done. Markdown with short bullets. Empty string when no code is needed.
+- questions: what you would need to ask the requester when something is ambiguous. Empty when clear.
+- title: a short name for the request. summary: one or two sentences in plain language on what will change.
+Write in the language the request is written in.`;
+
+const REQUEST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'title', 'summary', 'settings_changes', 'code_spec', 'questions'],
+  properties: {
+    kind: { type: 'string', enum: ['settings', 'code', 'both', 'question'] },
+    title: { type: 'string' },
+    summary: { type: 'string' },
+    settings_changes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['group', 'key', 'value', 'reason'],
+        properties: {
+          group: { type: 'string', enum: ['sections', 'limits', 'thresholds', 'events'] },
+          key: { type: 'string' },
+          value: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+    code_spec: { type: 'string' },
+    questions: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+// Converts Claude's string values to the type each setting uses and drops
+// anything that is not a real setting or would not change anything.
+function cleanSettingsChanges(changes, settings) {
+  const out = [];
+  for (const c of changes || []) {
+    const group = settings[c.group];
+    if (!group || !(c.key in group)) continue;
+    const current = group[c.key];
+    let value;
+    if (typeof current === 'boolean') value = /^(true|yes|on|1)$/i.test(String(c.value).trim());
+    else if (c.key === 'vehicle_name') value = String(c.value).trim();
+    else {
+      const num = parseFloat(String(c.value).replace(/[^0-9eE.+-]/g, ''));
+      if (!Number.isFinite(num)) continue;
+      value = num;
+    }
+    if (value === current) continue;
+    out.push({ group: c.group, key: c.key, value, previous: current ?? null, reason: c.reason });
+  }
+  return out;
+}
+
+// One request in, Claude's structured reading out.
+async function interpretRequest({ apiKey, model, text, settings }) {
+  const client = makeClient(apiKey);
+  const stream = client.beta.messages.stream({
+    model,
+    max_tokens: 16000,
+    betas: [FALLBACK_BETA],
+    fallbacks: 'default',
+    output_config: { effort: 'medium', format: { type: 'json_schema', schema: REQUEST_SCHEMA } },
+    system: REQUEST_SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        `Current page settings (group → key → value):\n${JSON.stringify(settings, null, 1)}`,
+        `What each group means:\n${JSON.stringify(SETTING_NOTES, null, 1)}`,
+        `Change request from the team:\n<request>\n${text}\n</request>`,
+      ].join('\n\n'),
+    }],
+  });
+  const final = await stream.finalMessage();
+  if (final.stop_reason === 'refusal') throw new Error('Claude declined to read this request.');
+  const raw = final.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const parsed = JSON.parse(raw);
+  return {
+    kind: parsed.kind,
+    title: parsed.title,
+    summary: parsed.summary,
+    settings_changes: cleanSettingsChanges(parsed.settings_changes, settings),
+    code_spec: parsed.code_spec || '',
+    questions: parsed.questions || [],
+    model: final.model,
+    at: new Date().toISOString(),
+  };
+}
+
 module.exports = {
+  interpretRequest,
   DEFAULT_MODEL,
   MODELS,
   MIGRATION_HINT,

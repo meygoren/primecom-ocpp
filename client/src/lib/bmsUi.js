@@ -60,3 +60,13 @@ export function btnStyle(primary) {
     borderRadius: 8, padding: '7px 14px', color: primary ? '#fff' : C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer',
   };
 }
+
+// Appends dictated text to what is already typed, with a space when needed.
+export function joinText(current, chunk) {
+  const c = String(current || '');
+  const add = String(chunk || '').trim();
+  if (!add) return c;
+  if (!c) return add;
+  const cjk = /[\u3000-\u9fff]$/.test(c) || /^[\u3000-\u9fff]/.test(add);
+  return cjk || /\s$/.test(c) ? c + add : `${c} ${add}`;
+}
