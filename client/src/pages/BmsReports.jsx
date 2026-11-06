@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Upload, Settings2, ArrowLeft, Trash2, X, Pencil, Check, FileDown, KeyRound, Languages } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Upload, Settings2, ArrowLeft, Trash2, X, Pencil, Check, FileDown, KeyRound, Languages, BarChart3, MessageSquarePlus } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
 import { makeT } from '../lib/bmsI18n';
 import { ReportBody, WarningCounts } from '../components/bms/BmsSections';
 import { C, LEVEL, ReportProvider, fmt, fmtDate, btnStyle, linkBtn, cardStyle, tableStyle, thStyle, tdStyle } from '../lib/bmsUi';
 import { TeamNotes, ClaudeAnalysis, ClaudeChat, ClaudeSettingsPanel } from '../components/bms/BmsClaude';
+import BmsRequests from '../components/bms/BmsRequests';
 
 // BMS Reports: upload the .xlsx log exported from the Primecom battery's
 // online BMS and read the analysis. The analysis itself is done on the server
@@ -81,6 +82,9 @@ const enT = makeT('en');
 export default function BmsReports() {
   const { id } = useParams();
   const profile = useProfile();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const view = params.get('view') === 'requests' ? 'requests' : 'reports';
   const [settings, setSettings] = useState(null);
   const [defaults, setDefaults] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -97,15 +101,48 @@ export default function BmsReports() {
   }, []);
 
   const headerButtons = (
-    <>
-      <button onClick={() => setShowAi(true)} style={btnStyle()}><KeyRound size={14} /> Claude settings</button>
-      <button onClick={() => setShowSettings(true)} disabled={!settings} style={btnStyle()}><Settings2 size={14} /> Analysis settings</button>
-    </>
+    <button onClick={() => setShowSettings(true)} disabled={!settings} style={btnStyle()}><Settings2 size={14} /> Analysis settings</button>
   );
 
+  function selectView(v) {
+    if (v === 'requests') setParams({ view: 'requests' });
+    else if (id) setParams({});
+    else navigate('/bms');
+  }
+
   return (
-    <div style={{ padding: '28px clamp(16px, 3vw, 36px)', maxWidth: 1280 }}>
-      {id ? (
+    <div style={{ padding: '20px clamp(16px, 3vw, 36px) 28px', maxWidth: 1280 }}>
+      {/* Mode selector: report analysis (default) or page change requests */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div role="tablist" style={{ display: 'inline-flex', background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3, gap: 3 }}>
+          {[['reports', 'Reports & analysis', BarChart3], ['requests', 'Page change requests', MessageSquarePlus]].map(([v, label, Icon]) => (
+            <button
+              key={v}
+              role="tab"
+              aria-selected={view === v}
+              onClick={() => selectView(v)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', borderRadius: 8, padding: '8px 14px',
+                background: view === v ? '#2d5c2a66' : 'transparent', color: view === v ? C.text : C.muted,
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              <Icon size={15} color={view === v ? C.green : C.muted} /> {label}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowAi(true)} style={btnStyle()}>
+          <KeyRound size={14} /> Claude settings
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: aiStatus?.configured ? C.green : C.amber }} title={aiStatus?.configured ? 'Connected' : 'No API key yet'} />
+        </button>
+      </div>
+
+      {view === 'requests' ? (
+        <BmsRequests
+          aiReady={!!aiStatus?.configured}
+          onSettingsChanged={(s) => { setSettings(s); setVersion((v) => v + 1); }}
+        />
+      ) : id ? (
         <ReportDetail id={id} version={version} aiStatus={aiStatus} headerButtons={headerButtons} />
       ) : (
         <ReportList headerButtons={headerButtons} settingsError={settingsError} />
