@@ -120,10 +120,11 @@ function buildContext({ report, analysis, previous, trend }) {
     pack_layout: a.pack ? {
       build: a.pack.config,
       spec: a.pack.spec,
-      mounted_on: a.pack.mount ? `${a.pack.mount} side of the truck, facing outward` : 'unknown',
-      layout_note: 'Modules are numbered down each column as seen standing outside the truck facing the pack: column 1 = modules 1 (top), 2, 3 (bottom); column 2 = 4-6; column 3 = 7-9. Each column of modules is one series string; the strings are in parallel.',
+      truck: a.assignment?.truck ?? 'not assigned',
+      mounted_on: a.pack.mount ? `${a.pack.mount} side of the truck, facing outward` : 'not set (layout shown as driver side)',
+      layout_note: 'Positions use the labels printed on the pack, as seen standing outside the truck facing it: rows 1 (top) to 3 (bottom), columns a to c (left to right). "module" is the BMS module number (cells 48(k-1)+1..48k, sensors 16(k-1)+1..16k). Each column is one series string; the three strings are in parallel. The middle column is numbered bottom-up, and the passenger and driver packs are mirror images.',
       modules: a.pack.modules.map((m) => ({
-        module: m.module, string: m.string, column: m.column, row: m.row,
+        position: m.position, module: m.module, string: m.string,
         cells: `${m.cell_start}-${m.cell_end}`, sensors: m.sensor_start ? `${m.sensor_start}-${m.sensor_end}` : null,
         avg_temp_c: m.avg_temp_c, max_temp_c: m.max_temp_c, temp_vs_pack_c: m.temp_vs_pack_c,
         cell_vs_pack_mv: m.cell_vs_pack_mv, weakest_cell: m.weakest_cell, hottest_sensor: m.hottest_sensor,
