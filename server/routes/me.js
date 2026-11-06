@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../db/supabase');
 const connections = require('../state/connections');
 const { getConnectorLiveDataBatch } = require('../utils/liveData');
+const { isOwner } = require('../utils/owner');
 
 async function enrichChargers(chargers) {
   const ids = chargers.map((c) => c.charger_id);
@@ -26,7 +27,8 @@ router.get('/', async (req, res) => {
   const user = await getUserFromReq(req);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  res.json({ id: user.id, email: user.email, profile: profile || { role: 'viewer' } });
+  // is_owner: the Primecom platform owner (utils/owner.js), who also sees battery engineering details.
+  res.json({ id: user.id, email: user.email, profile: { ...(profile || { role: 'viewer' }), is_owner: isOwner(user) } });
 });
 
 // GET /api/me/chargers

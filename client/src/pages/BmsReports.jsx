@@ -9,6 +9,7 @@ import { FleetHome, TruckPage, SystemPage, AssignDialog } from '../components/bm
 import { C, LEVEL, ReportProvider, fmt, fmtDate, btnStyle, linkBtn } from '../lib/bmsUi';
 import { TeamNotes, ClaudeAnalysis, ClaudeChat, ClaudeSettingsPanel } from '../components/bms/BmsClaude';
 import BmsRequests from '../components/bms/BmsRequests';
+import BmsReference from '../components/bms/BmsReference';
 
 // BMS Reports: upload the .xlsx log exported from the Primecom battery's
 // online BMS and read the analysis. The analysis itself is done on the server
@@ -423,6 +424,8 @@ function ExportDialog({ report, initialLang, onClose }) {
 function SettingsPanel({ settings, defaults, onClose, onSaved }) {
   const profile = useProfile();
   const canEdit = profile?.role === 'admin' || profile?.role === 'operator';
+  // Battery build details and supplier data are for the Primecom platform owner only.
+  const isOwner = !!profile?.is_owner;
   const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(settings)));
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -436,14 +439,15 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
     setMsg(null);
     // Numbers come back from inputs as strings; keep text fields as text.
     const clean = JSON.parse(JSON.stringify(draft));
-    for (const k of PACK_NUMBER_FIELDS.map(([key]) => key)) {
+    if (!isOwner) delete clean.pack;
+    for (const k of isOwner ? PACK_NUMBER_FIELDS.map(([key]) => key) : []) {
       const v = clean.pack[k];
       clean.pack[k] = v === '' || v == null ? defaults?.pack?.[k] ?? null : Number(v);
     }
     // Old settings fields replaced by the per-side layouts and truck assignments.
-    for (const k of ['modules', 'mounts', 'layout_columns', 'layout_rows']) delete clean.pack[k];
+    if (clean.pack) for (const k of ['modules', 'mounts', 'layout_columns', 'layout_rows']) delete clean.pack[k];
     delete clean.fleet;
-    const bad = ['driver', 'passenger'].find((side) => layoutProblem(clean.pack.layouts?.[side], clean.pack));
+    const bad = clean.pack && ['driver', 'passenger'].find((side) => layoutProblem(clean.pack.layouts?.[side], clean.pack));
     if (bad) {
       setMsg(`${SIDE_LABEL[bad]} layout: ${layoutProblem(clean.pack.layouts[bad], clean.pack)}`);
       setSaving(false);
@@ -480,6 +484,11 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+          {isOwner && (
+            <SettingsGroup title="Battery reference data">
+              <BmsReference />
+            </SettingsGroup>
+          )}
           <SettingsGroup title="Show these sections">
             <label style={checkRow}>
               <input type="checkbox" checked={allOn} disabled={!canEdit}
@@ -503,9 +512,11 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
           <SettingsGroup title="Warning thresholds">
             <NumberGrid fields={THRESHOLD_FIELDS} group="thresholds" draft={draft} defaults={defaults} setVal={setVal} disabled={!canEdit} />
           </SettingsGroup>
-          <SettingsGroup title="Battery pack">
-            <PackSettings draft={draft} setDraft={setDraft} defaults={defaults} disabled={!canEdit} />
-          </SettingsGroup>
+          {isOwner && (
+            <SettingsGroup title="Battery pack (only you can see this)">
+              <PackSettings draft={draft} setDraft={setDraft} defaults={defaults} disabled={!canEdit} />
+            </SettingsGroup>
+          )}
           <SettingsGroup title="Session detection">
             <NumberGrid fields={EVENT_FIELDS} group="events" draft={draft} defaults={defaults} setVal={setVal} disabled={!canEdit} />
           </SettingsGroup>

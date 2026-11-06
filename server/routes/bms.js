@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../db/supabase');
 const requireRole = require('../middleware/requireRole');
+const { isOwner } = require('../utils/owner');
 const { extractBmsLog, analyzeBmsLog, mergeSettings, DEFAULT_SETTINGS, SUMMARY_VERSION } = require('../services/bmsAnalyzer');
 const { buildTrend } = require('../services/bmsTrend');
 const claude = require('../services/claude');
@@ -89,9 +90,31 @@ async function loadFullReport(id) {
 }
 
 // GET /api/bms/settings
-router.get('/settings', anyRole, async (_req, res) => {
+// Battery build details (cell maker, pack build) are for the platform owner
+// only — customer admins see the analysis without them.
+function hidePackDetails(settings) {
+  if (!settings?.pack) return settings;
+  const { system_name, layouts } = settings.pack;
+  return { ...settings, pack: { system_name, layouts } };
+}
+function reportForViewer(data, user) {
+  if (isOwner(user) || !data?.analysis) return data;
+  const a = data.analysis;
+  return {
+    ...data,
+    analysis: {
+      ...a,
+      settings: hidePackDetails(a.settings),
+      pack: a.pack ? { ...a.pack, config: { ...a.pack.config, cell_maker: null } } : a.pack,
+    },
+  };
+}
+
+router.get('/settings', anyRole, async (req, res) => {
   try {
-    res.json({ settings: await loadSettings(), defaults: DEFAULT_SETTINGS });
+    const settings = await loadSettings();
+    if (isOwner(req.user)) return res.json({ settings, defaults: DEFAULT_SETTINGS });
+    res.json({ settings: hidePackDetails(settings), defaults: hidePackDetails(DEFAULT_SETTINGS) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -102,12 +125,14 @@ router.put('/settings', operatorUp, async (req, res) => {
   // Truck assignments are saved through PUT /systems/:hwid only; keep the
   // stored ones so a settings panel opened earlier cannot undo them.
   const current = await loadSettings();
-  const settings = mergeSettings({ ...req.body?.settings, fleet: current.fleet, pack: { ...req.body?.settings?.pack, mounts: {} } });
+  // Only the platform owner can change the battery pack build.
+  const pack = isOwner(req.user) ? { ...req.body?.settings?.pack, mounts: {} } : current.pack;
+  const settings = mergeSettings({ ...req.body?.settings, fleet: current.fleet, pack });
   const { error } = await supabase
     .from('bms_settings')
     .upsert({ id: 1, settings, updated_at: new Date().toISOString() });
   if (error) return res.status(500).json({ error: `${error.message} — ${MIGRATION_HINT}` });
-  res.json({ settings });
+  res.json({ settings: isOwner(req.user) ? settings : hidePackDetails(settings) });
 });
 
 // GET /api/bms/reports — list, newest log first
@@ -217,7 +242,7 @@ router.post(
 // plus the previous log and the trend for the same battery.
 router.get('/reports/:id', anyRole, async (req, res) => {
   try {
-    res.json(await loadFullReport(req.params.id));
+    res.json(reportForViewer(await loadFullReport(req.params.id), req.user));
   } catch (err) {
     if (err.status !== 404) console.error('[BMS] Analysis failed:', err.message);
     res.status(err.status || 500).json({ error: err.message });
@@ -649,7 +674,7 @@ router.post('/requests/:id/approve', adminOnly, async (req, res) => {
 
     const { data, error: uErr } = await supabase.from('bms_change_requests').update(update).eq('id', row.id).select().single();
     if (uErr) throw new Error(uErr.message);
-    res.json({ request: data, settings: merged });
+    res.json({ request: data, settings: merged && !isOwner(req.user) ? hidePackDetails(merged) : merged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
