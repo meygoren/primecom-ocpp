@@ -481,8 +481,74 @@ router.post('/reports/:id/analysis', operatorUp, async (req, res) => {
 });
 
 // --- page change requests ------------------------------------------------------
+// Anyone signed in can submit a request (with their name). Claude reads it and
+// drafts a proposal, but nothing is applied until an admin approves it. Admins
+// are emailed about every new request.
 
 const REQUESTS_HINT = 'run supabase_migration_bms_requests.sql in the Supabase SQL editor';
+const REQUEST_STATUSES = ['pending', 'approved', 'in_progress', 'done', 'declined'];
+
+// Who gets the "new change request" email: the saved list, or every admin.
+async function requestRecipients() {
+  const { data: row } = await supabase.from('app_ai_settings').select('request_notify_emails').eq('id', 1).maybeSingle();
+  const saved = (row?.request_notify_emails || []).filter(Boolean);
+  if (saved.length) return { emails: saved, source: 'list' };
+
+  const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin');
+  const ids = new Set((admins || []).map((a) => a.id));
+  if (!ids.size) return { emails: [], source: 'admins' };
+  const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  if (error) return { emails: [], source: 'admins' };
+  return { emails: (data?.users || []).filter((u) => ids.has(u.id) && u.email).map((u) => u.email), source: 'admins' };
+}
+
+async function notifyNewRequest(row, pageUrl) {
+  try {
+    const { emails } = await requestRecipients();
+    if (!emails.length) {
+      console.log('[BMS] New change request — no one to email (no admin accounts or saved recipients)');
+      return;
+    }
+    const { sendEmail } = require('../services/alertService');
+    const ai = row.ai;
+    const kinds = { settings: 'Settings change', code: 'Code change', both: 'Settings + code change', question: 'Needs more detail' };
+    const subject = `BMS change request from ${row.requester_name || row.author || 'the team'}${ai?.title ? ` — ${ai.title}` : ''}`;
+    const lines = [
+      `${row.requester_name || 'Someone'} requested a change to the BMS Reports page.`,
+      `Nothing has been changed — it is waiting for your approval.`,
+      ``,
+      `Name    : ${row.requester_name || '(not given)'}`,
+      `Account : ${row.author || '(unknown)'}`,
+      `Sent    : ${new Date(row.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })} (Pacific)`,
+      ``,
+      `What they asked for:`,
+      row.request,
+      ``,
+    ];
+    if (ai) {
+      lines.push(`Claude's reading (${kinds[ai.kind] || ai.kind}):`, ai.summary, ``);
+      if (ai.settings_changes?.length) {
+        lines.push('Settings it would change (only if you approve):');
+        for (const c of ai.settings_changes) lines.push(`  - ${c.group} > ${c.key}: ${c.previous} -> ${c.value}  (${c.reason})`);
+        lines.push('');
+      }
+      if (ai.code_spec) lines.push('Needs a code change — the developer spec is on the request page.', '');
+      if (ai.questions?.length) lines.push('Claude would ask:', ...ai.questions.map((q) => `  - ${q}`), '');
+    } else {
+      lines.push('Claude has not read this request yet.', '');
+    }
+    lines.push(`Approve or decline: ${pageUrl}`);
+
+    for (const email of emails) await sendEmail(email, subject, lines.join('\n'));
+  } catch (err) {
+    console.error('[BMS] Change request email failed:', err.message);
+  }
+}
+
+function pageUrlFrom(req) {
+  const base = process.env.APP_URL || req.get('origin') || '';
+  return `${base.replace(/\/$/, '')}/bms?view=requests`;
+}
 
 // GET /api/bms/requests
 router.get('/requests', anyRole, async (_req, res) => {
@@ -492,7 +558,7 @@ router.get('/requests', anyRole, async (_req, res) => {
     .order('created_at', { ascending: false })
     .limit(300);
   if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
-  res.json(data);
+  res.json((data || []).map((r) => ({ ...r, status: r.status === 'open' ? 'pending' : r.status })));
 });
 
 // Asks Claude to read a request and stores the result on it. Never throws:
@@ -511,60 +577,87 @@ async function interpretAndStore(row) {
   }
 }
 
-// POST /api/bms/requests — body: { request }. Anyone signed in can ask.
+// POST /api/bms/requests — body: { request, requester_name }. Anyone signed in.
 router.post('/requests', anyRole, async (req, res) => {
   const text = String(req.body?.request || '').trim();
+  const name = String(req.body?.requester_name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Please enter your name' });
   if (!text) return res.status(400).json({ error: 'Describe the change you want' });
+
   const { data: row, error } = await supabase
     .from('bms_change_requests')
-    .insert({ request: text.slice(0, 8000), author: req.user?.email || null, status: 'open' })
+    .insert({ request: text.slice(0, 8000), requester_name: name.slice(0, 120), author: req.user?.email || null, status: 'pending' })
     .select()
     .single();
   if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
-  res.json(await interpretAndStore(row));
+
+  const result = await interpretAndStore(row);
+  // Email the admins in the background — the requester does not wait on it.
+  notifyNewRequest(result, pageUrlFrom(req));
+  res.json(result);
 });
 
-// POST /api/bms/requests/:id/interpret — ask Claude again
+// POST /api/bms/requests/:id/interpret — ask Claude again (does not apply anything)
 router.post('/requests/:id/interpret', operatorUp, async (req, res) => {
   const { data: row, error } = await supabase.from('bms_change_requests').select('*').eq('id', req.params.id).single();
   if (error || !row) return res.status(404).json({ error: 'Request not found' });
   res.json(await interpretAndStore(row));
 });
 
-// POST /api/bms/requests/:id/apply — apply Claude's proposed settings changes
-router.post('/requests/:id/apply', operatorUp, async (req, res) => {
+// POST /api/bms/requests/:id/approve — admins only.
+// Body: { apply_settings: boolean, note? }. Settings Claude proposed are
+// applied only here, and only when apply_settings is true.
+router.post('/requests/:id/approve', adminOnly, async (req, res) => {
   const { data: row, error } = await supabase.from('bms_change_requests').select('*').eq('id', req.params.id).single();
   if (error || !row) return res.status(404).json({ error: 'Request not found' });
+
   const changes = row.ai?.settings_changes || [];
-  if (!changes.length) return res.status(400).json({ error: 'This request has no settings changes to apply' });
+  const applySettings = !!req.body?.apply_settings && changes.length > 0;
+  const now = new Date().toISOString();
+  const who = req.user?.email || null;
 
   try {
-    const settings = await loadSettings();
-    for (const c of changes) {
-      if (settings[c.group] && c.key in settings[c.group]) settings[c.group][c.key] = c.value;
+    let merged = null;
+    if (applySettings) {
+      const settings = await loadSettings();
+      for (const c of changes) {
+        if (settings[c.group] && c.key in settings[c.group]) settings[c.group][c.key] = c.value;
+      }
+      merged = mergeSettings(settings);
+      const { error: sErr } = await supabase.from('bms_settings').upsert({ id: 1, settings: merged, updated_at: now });
+      if (sErr) throw new Error(sErr.message);
     }
-    const merged = mergeSettings(settings);
-    const { error: sErr } = await supabase.from('bms_settings').upsert({ id: 1, settings: merged, updated_at: new Date().toISOString() });
-    if (sErr) throw new Error(sErr.message);
 
-    // A settings-only request is finished once applied.
-    const nextStatus = row.ai?.kind === 'settings' ? 'done' : row.status;
-    const { data } = await supabase
-      .from('bms_change_requests')
-      .update({ applied_at: new Date().toISOString(), applied_by: req.user?.email || null, status: nextStatus })
-      .eq('id', row.id)
-      .select()
-      .single();
+    // Settings-only request + settings applied = finished. Anything that
+    // still needs code stays "approved" until it is built.
+    const status = applySettings && row.ai?.kind === 'settings' ? 'done' : 'approved';
+    const update = { status, decided_at: now, decided_by: who, decision_note: req.body?.note ? String(req.body.note).slice(0, 2000) : null };
+    if (applySettings) Object.assign(update, { applied_at: now, applied_by: who });
+
+    const { data, error: uErr } = await supabase.from('bms_change_requests').update(update).eq('id', row.id).select().single();
+    if (uErr) throw new Error(uErr.message);
     res.json({ request: data, settings: merged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PATCH /api/bms/requests/:id — body: { status }
-router.patch('/requests/:id', operatorUp, async (req, res) => {
+// POST /api/bms/requests/:id/decline — admins only. Body: { note? }
+router.post('/requests/:id/decline', adminOnly, async (req, res) => {
+  const { data, error } = await supabase
+    .from('bms_change_requests')
+    .update({ status: 'declined', decided_at: new Date().toISOString(), decided_by: req.user?.email || null, decision_note: req.body?.note ? String(req.body.note).slice(0, 2000) : null })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// PATCH /api/bms/requests/:id — admins only. Body: { status } (e.g. in_progress, done)
+router.patch('/requests/:id', adminOnly, async (req, res) => {
   const status = req.body?.status;
-  if (!['open', 'in_progress', 'done', 'declined'].includes(status)) return res.status(400).json({ error: 'Unknown status' });
+  if (!REQUEST_STATUSES.includes(status)) return res.status(400).json({ error: 'Unknown status' });
   const { data, error } = await supabase.from('bms_change_requests').update({ status }).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -575,6 +668,32 @@ router.delete('/requests/:id', adminOnly, async (req, res) => {
   const { error } = await supabase.from('bms_change_requests').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+
+// GET /api/bms/request-settings — who is emailed about new requests (admins)
+router.get('/request-settings', adminOnly, async (_req, res) => {
+  try {
+    const { data: row } = await supabase.from('app_ai_settings').select('request_notify_emails').eq('id', 1).maybeSingle();
+    const recipients = await requestRecipients();
+    res.json({
+      emails: row?.request_notify_emails || [],
+      effective: recipients.emails,
+      email_configured: !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bms/request-settings — body: { emails: [...] } (admins). Empty = all admins.
+router.put('/request-settings', adminOnly, async (req, res) => {
+  const emails = [...new Set((Array.isArray(req.body?.emails) ? req.body.emails : [])
+    .map((e) => String(e).trim().toLowerCase())
+    .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))];
+  const { error } = await supabase.from('app_ai_settings').upsert({ id: 1, request_notify_emails: emails });
+  if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
+  const recipients = await requestRecipients();
+  res.json({ emails, effective: recipients.emails, email_configured: !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) });
 });
 
 module.exports = router;
