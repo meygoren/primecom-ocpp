@@ -99,7 +99,10 @@ router.get('/settings', anyRole, async (_req, res) => {
 
 // PUT /api/bms/settings — body: { settings: { sections, limits, thresholds, events } }
 router.put('/settings', operatorUp, async (req, res) => {
-  const settings = mergeSettings(req.body?.settings);
+  // Truck assignments are saved through PUT /systems/:hwid only; keep the
+  // stored ones so a settings panel opened earlier cannot undo them.
+  const current = await loadSettings();
+  const settings = mergeSettings({ ...req.body?.settings, fleet: current.fleet, pack: { ...req.body?.settings?.pack, mounts: {} } });
   const { error } = await supabase
     .from('bms_settings')
     .upsert({ id: 1, settings, updated_at: new Date().toISOString() });
@@ -798,7 +801,16 @@ function systemStats(logs, settings, side) {
     hottest_position: topHot ? positionOf(settings, side, Number(topHot[0])) : null,
     hottest_share: topHot ? r1((topHot[1] / s.length) * 100) : null,
     latest_warnings: latest.warnings || null,
+    // Average of each module's average temperature across these logs.
+    module_temps: moduleTemps(s),
   };
+}
+
+function moduleTemps(summaries) {
+  const lists = summaries.map((x) => x.module_temps).filter(Array.isArray);
+  if (!lists.length) return null;
+  const n = Math.max(...lists.map((l) => l.length));
+  return Array.from({ length: n }, (_, i) => r1(avg(lists.map((l) => l[i]))));
 }
 
 // GET /api/bms/fleet?days=30 — every truck, both sides, plus fleet totals.
@@ -823,10 +835,12 @@ router.get('/fleet', anyRole, async (req, res) => {
         const hwid = hwids[0] || null;
         const recent = hwid ? windowLogs(hwid) : [];
         const latestAny = hwid ? byHwid[hwid]?.[0] : null;
+        const stats = hwid ? systemStats(recent, settings, side) : null;
         return [side, hwid ? {
           hwid,
           other_hwids: hwids.slice(1),
-          ...systemStats(recent, settings, side),
+          ...stats,
+          module_temps: stats.module_temps || latestAny?.summary?.module_temps || null,
           last_log: latestAny?.start_time || null,
           last_report_id: latestAny?.id || null,
           soh: latestAny?.summary?.soh ?? null,
@@ -881,7 +895,7 @@ router.get('/fleet', anyRole, async (req, res) => {
       if (x) fleet[k] = { truck: x.truck, name: x.name, side: x.side, hwid: x.hwid, soh: x.soh, max_temp_c: x.max_temp_c, equivalent_full_cycles: x.equivalent_full_cycles };
     }
 
-    res.json({ trucks: slots, unassigned, fleet });
+    res.json({ trucks: slots, unassigned, fleet, layouts: settings.pack.layouts });
   } catch (err) {
     console.error('[BMS] Fleet summary failed:', err.message);
     res.status(500).json({ error: err.message });
@@ -908,6 +922,7 @@ router.get('/systems/:hwid', anyRole, async (req, res) => {
       all_time: systemStats(logs, settings, assignment?.side),
       last_30_days: systemStats(logs.filter((l) => l.start_time >= since30), settings, assignment?.side),
       trend: buildTrend([...logs].reverse()),
+      layouts: settings.pack.layouts,
       logs: logs.map((l) => ({ id: l.id, start_time: l.start_time, end_time: l.end_time, file_name: l.file_name, summary: l.summary })),
     });
   } catch (err) {

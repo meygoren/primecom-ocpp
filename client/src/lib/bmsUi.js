@@ -70,3 +70,21 @@ export function joinText(current, chunk) {
   const cjk = /[\u3000-\u9fff]$/.test(c) || /^[\u3000-\u9fff]/.test(add);
   return cjk || /\s$/.test(c) ? c + add : `${c} ${add}`;
 }
+
+// --- heat-map colours (pack view, truck and fleet pages) ------------------------
+
+// Heat: one-hue orange ramp, dark (cool, recedes into the surface) → bright (hot).
+export const HEAT = ['#3a2216', '#5c2c18', '#87391b', '#b4481f', '#d95926', '#ec7d44', '#f6a675', '#fcd5bf'];
+
+function hexToRgb(h) { const x = parseInt(h.slice(1), 16); return [x >> 16, (x >> 8) & 255, x & 255]; }
+export function mix(a, b, t) {
+  const [r1, g1, b1] = hexToRgb(a); const [r2, g2, b2] = hexToRgb(b);
+  const c = (x, y) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
+  return `#${c(r1, r2)}${c(g1, g2)}${c(b1, b2)}`;
+}
+function rampColor(ramp, t) {
+  const x = Math.max(0, Math.min(1, t)) * (ramp.length - 1);
+  const i = Math.min(ramp.length - 2, Math.floor(x));
+  return mix(ramp[i], ramp[i + 1], x - i);
+}
+export function heatColor(v, lo, hi) { return v == null ? C.inner : rampColor(HEAT, hi > lo ? (v - lo) / (hi - lo) : 0.5); }

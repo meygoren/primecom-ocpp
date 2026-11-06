@@ -155,7 +155,7 @@ const DIR = {
   down: { color: C.muted, Icon: ArrowDownRight },
 };
 
-function Trend({ trend }) {
+export function Trend({ trend }) {
   const { t, lang } = useReport();
   if (!trend) return null;
   const metrics = Object.fromEntries((trend.metrics || []).map((m) => [m.key, m]));

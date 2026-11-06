@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Play, Pause, Eye } from 'lucide-react';
-import { C, useReport, fmt, fmtDate, btnStyle, tableStyle, thStyle, tdStyle, rowStyle } from '../../lib/bmsUi';
+import { C, HEAT, heatColor, mix, useReport, fmt, fmtDate, btnStyle, tableStyle, thStyle, tdStyle, rowStyle } from '../../lib/bmsUi';
 import { Section } from './BmsSections';
 
 // Pack view: the battery drawn as seen standing outside the truck, facing the
@@ -8,25 +8,11 @@ import { Section } from './BmsSections';
 // map) or its cells (balance map) — plus a top-down truck diagram showing
 // which side the pack is on, and a module ranking.
 
-// Heat: one-hue orange ramp, dark (cool, recedes into the surface) → bright (hot).
-const HEAT = ['#3a2216', '#5c2c18', '#87391b', '#b4481f', '#d95926', '#ec7d44', '#f6a675', '#fcd5bf'];
 // Balance: blue (below pack average) ↔ grey (average) ↔ orange (above).
 const COOL = '#3987e5';
 const WARM = '#d95926';
 const MID = '#383835';
 
-function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
-function mix(a, b, t) {
-  const [r1, g1, b1] = hexToRgb(a); const [r2, g2, b2] = hexToRgb(b);
-  const c = (x, y) => Math.round(x + (y - x) * t).toString(16).padStart(2, '0');
-  return `#${c(r1, r2)}${c(g1, g2)}${c(b1, b2)}`;
-}
-function rampColor(ramp, t) {
-  const x = Math.max(0, Math.min(1, t)) * (ramp.length - 1);
-  const i = Math.min(ramp.length - 2, Math.floor(x));
-  return mix(ramp[i], ramp[i + 1], x - i);
-}
-function heatColor(v, lo, hi) { return v == null ? C.inner : rampColor(HEAT, hi > lo ? (v - lo) / (hi - lo) : 0.5); }
 function balanceColor(v, maxAbs) {
   if (v == null) return C.inner;
   const t = maxAbs ? Math.max(-1, Math.min(1, v / maxAbs)) : 0;
@@ -104,7 +90,7 @@ export default function PackView({ a }) {
   };
 
   const { layout_columns: cols, layout_rows: rows } = pack.config;
-  const posLabel = (m) => t('col_pos', { c: m.column, r: t(`row_${m.row}`) || m.row });
+  const posLabel = (m) => m.position || t('col_pos', { c: m.column, r: t(`row_${m.row}`) || m.row });
   const hottest = pack.modules.find((m) => m.module === pack.hottest_module);
   const badChecks = pack.checks.filter((c) => !c.ok);
 
@@ -133,7 +119,7 @@ export default function PackView({ a }) {
     return (
       <g key={m.module}>
         <rect x={x} y={y} width={MW} height={MH} rx={10} fill={C.card} stroke={isHot ? C.amber : C.border} strokeWidth={isHot ? 2 : 1} />
-        <text x={x + 10} y={y + 18} fill={C.text} fontSize={13} fontWeight={700}>{t('module_n', { n: m.module })}</text>
+        <text x={x + 10} y={y + 18} fill={C.text} fontSize={13} fontWeight={700}>{t('module_pos', { pos: m.position, n: m.module })}</text>
         <text x={x + MW - 10} y={y + 18} fill={C.muted} fontSize={11} textAnchor="end">{summary}</text>
         {items.map((n, k) => {
           const v = view === 'heat' ? sensorValue(n) : cellValue(n);

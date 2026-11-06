@@ -110,7 +110,7 @@ const DEFAULT_SETTINGS = {
 };
 
 // Bump when summary fields change, so stored summaries are recomputed for trends.
-const SUMMARY_VERSION = 3;
+const SUMMARY_VERSION = 4;
 
 function validLayout(grid) {
   if (!Array.isArray(grid) || !grid.length) return null;
@@ -965,6 +965,9 @@ function analyzeBmsLog(extracted, savedSettings) {
   const packView = buildPack(S.pack, meta, cellStats, tempStats, S.fleet.systems[meta.hwid] || null);
   summary.hottest_module = packView.hottest_module;
   summary.coolest_module = packView.coolest_module;
+  // Average temperature of each BMS module (index 0 = module 1), so the fleet
+  // and truck pages can draw heat maps without loading the full log.
+  summary.module_temps = [...packView.modules].sort((x, y) => x.module - y.module).map((m) => m.avg_temp_c ?? null);
 
   return {
     settings: S,

@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Upload, Settings2, ArrowLeft, Trash2, X, Pencil, Check, FileDown, KeyRound, Languages, BarChart3, MessageSquarePlus } from 'lucide-react';
+import { Settings2, ArrowLeft, ChevronRight, Trash2, X, Pencil, Check, FileDown, KeyRound, Languages, BarChart3, MessageSquarePlus, ArrowLeftRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { useProfile } from '../contexts/ProfileContext';
 import { makeT } from '../lib/bmsI18n';
-import { ReportBody, WarningCounts } from '../components/bms/BmsSections';
-import { C, LEVEL, ReportProvider, fmt, fmtDate, btnStyle, linkBtn, cardStyle, tableStyle, thStyle, tdStyle } from '../lib/bmsUi';
+import { ReportBody } from '../components/bms/BmsSections';
+import { FleetHome, TruckPage, SystemPage, AssignDialog } from '../components/bms/BmsFleet';
+import { C, LEVEL, ReportProvider, fmt, fmtDate, btnStyle, linkBtn } from '../lib/bmsUi';
 import { TeamNotes, ClaudeAnalysis, ClaudeChat, ClaudeSettingsPanel } from '../components/bms/BmsClaude';
 import BmsRequests from '../components/bms/BmsRequests';
 
@@ -81,8 +82,6 @@ const PACK_NUMBER_FIELDS = [
   ['sensors_per_module', 'Temperature sensors per module', ''],
   ['modules_in_series', 'Modules in series per string', ''],
   ['strings_in_parallel', 'Strings in parallel', ''],
-  ['layout_columns', 'Columns of modules (left → right)', ''],
-  ['layout_rows', 'Rows of modules (top → bottom)', ''],
 ];
 
 const EVENT_FIELDS = [
@@ -92,13 +91,12 @@ const EVENT_FIELDS = [
 ];
 
 
-function shortId(id) { return id ? `${String(id).slice(0, 6)}…${String(id).slice(-4)}` : '—'; }
-const enT = makeT('en');
+const SIDE_LABEL = { driver: 'Driver side', passenger: 'Passenger side' };
 
 // --- page -------------------------------------------------------------------
 
 export default function BmsReports() {
-  const { id } = useParams();
+  const { id, truck, hwid } = useParams();
   const profile = useProfile();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -124,7 +122,7 @@ export default function BmsReports() {
 
   function selectView(v) {
     if (v === 'requests') setParams({ view: 'requests' });
-    else if (id) setParams({});
+    else if (id || truck || hwid) setParams({});
     else navigate('/bms');
   }
 
@@ -162,8 +160,12 @@ export default function BmsReports() {
         />
       ) : id ? (
         <ReportDetail id={id} version={version} aiStatus={aiStatus} headerButtons={headerButtons} />
+      ) : truck ? (
+        <TruckPage key={`${truck}-${version}`} truck={truck} headerButtons={headerButtons} />
+      ) : hwid ? (
+        <SystemPage key={`${hwid}-${version}`} hwid={hwid} headerButtons={headerButtons} />
       ) : (
-        <ReportList headerButtons={headerButtons} settingsError={settingsError} />
+        <FleetHome key={version} headerButtons={headerButtons} settingsError={settingsError} />
       )}
       {showSettings && settings && (
         <SettingsPanel
@@ -180,139 +182,6 @@ export default function BmsReports() {
   );
 }
 
-// --- list + upload ------------------------------------------------------------
-
-function ReportList({ headerButtons, settingsError }) {
-  const navigate = useNavigate();
-  const profile = useProfile();
-  const canUpload = profile?.role === 'admin' || profile?.role === 'operator';
-  const [reports, setReports] = useState(null);
-  const [error, setError] = useState(null);
-  const [uploads, setUploads] = useState([]); // [{ name, status, message, id }]
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef();
-
-  async function load() {
-    try {
-      setReports(await api.getBmsReports());
-      setError(null);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-  useEffect(() => { load(); }, []);
-
-  async function uploadFiles(files) {
-    const list = [...files].filter((f) => /\.xlsx$/i.test(f.name));
-    if (!list.length) {
-      setUploads([{ name: 'Upload', status: 'error', message: 'Choose .xlsx files exported from the BMS platform.' }]);
-      return;
-    }
-    setUploads(list.map((f) => ({ name: f.name, status: 'waiting' })));
-    let lastId = null;
-    for (let k = 0; k < list.length; k++) {
-      setUploads((u) => u.map((x, j) => (j === k ? { ...x, status: 'uploading' } : x)));
-      try {
-        const r = await api.uploadBmsReport(list[k]);
-        lastId = r.id;
-        setUploads((u) => u.map((x, j) => (j === k ? { ...x, status: 'done', id: r.id, message: r.duplicate ? 'Already uploaded — opened the existing report' : 'Analyzed' } : x)));
-      } catch (err) {
-        setUploads((u) => u.map((x, j) => (j === k ? { ...x, status: 'error', message: err.message } : x)));
-      }
-    }
-    await load();
-    if (list.length === 1 && lastId) navigate(`/bms/${lastId}`);
-  }
-
-  return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>BMS Reports</h1>
-          <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-            Upload battery BMS logs (.xlsx from the online BMS) to get a summary, warnings and trends.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{headerButtons}</div>
-      </div>
-
-      {settingsError && <Banner level="critical" text={settingsError} />}
-
-      {canUpload && (
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); uploadFiles(e.dataTransfer.files); }}
-          onClick={() => inputRef.current?.click()}
-          style={{
-            background: dragging ? '#2d5c2a33' : C.card, border: `1.5px dashed ${dragging ? C.green : C.border}`,
-            borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', marginBottom: 16,
-          }}
-        >
-          <Upload size={22} color={C.green} style={{ display: 'block', margin: '0 auto' }} />
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 8 }}>Drop BMS log files here, or click to choose</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>.xlsx export from the BMS platform. Several files at once is fine.</div>
-          <input ref={inputRef} type="file" accept=".xlsx" multiple hidden onChange={(e) => { uploadFiles(e.target.files); e.target.value = ''; }} />
-        </div>
-      )}
-
-      {uploads.length > 0 && (
-        <div style={{ ...cardStyle, marginBottom: 16, padding: 14 }}>
-          {uploads.map((u, k) => (
-            <div key={k} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 13, padding: '4px 0', flexWrap: 'wrap' }}>
-              <span style={{ color: C.text, fontWeight: 600, wordBreak: 'break-all' }}>{u.name}</span>
-              <span style={{ color: u.status === 'error' ? C.red : u.status === 'done' ? C.green : C.muted }}>
-                {u.status === 'uploading' ? 'Uploading and analyzing…' : u.status === 'waiting' ? 'Waiting…' : u.message}
-              </span>
-              {u.id && <button onClick={() => navigate(`/bms/${u.id}`)} style={{ ...linkBtn, marginLeft: 'auto' }}>Open</button>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && <Banner level="critical" text={error} />}
-
-      <div style={{ ...cardStyle, padding: 0, overflowX: 'auto' }}>
-        <table style={{ ...tableStyle, minWidth: 960 }}>
-          <thead>
-            <tr>{['Battery', 'Period', 'Discharged', 'Charged', 'Peak out', 'Peak A', 'Max temp', 'Cell spread', 'SOH', 'Flags'].map((h) => <th key={h} style={thStyle}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {!reports ? (
-              <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: C.muted }}>{error ? '—' : 'Loading…'}</td></tr>
-            ) : reports.length === 0 ? (
-              <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: C.muted }}>No BMS logs uploaded yet</td></tr>
-            ) : reports.map((r) => {
-              const s = r.summary || {};
-              return (
-                <tr key={r.id} onClick={() => navigate(`/bms/${r.id}`)} style={{ borderTop: `1px solid ${C.border}`, cursor: 'pointer' }}>
-                  <td style={tdStyle}>
-                    <div style={{ color: C.text, fontWeight: 600 }}>{r.label || r.device_model || 'Battery'}</div>
-                    <div style={{ fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>{shortId(r.hwid)}</div>
-                  </td>
-                  <td style={tdStyle}>
-                    <div style={{ color: C.text }}>{fmtDate(r.start_time)}</div>
-                    <div style={{ fontSize: 11, color: C.muted }}>{fmt(s.hours, 'h')} · {r.row_count} readings</div>
-                  </td>
-                  <td style={{ ...tdStyle, color: C.text, fontWeight: 600 }}>{fmt(s.discharge_kwh, 'kWh')}</td>
-                  <td style={tdStyle}>{fmt(s.charge_kwh, 'kWh')}</td>
-                  <td style={tdStyle}>{fmt(s.peak_discharge_kw, 'kW')}</td>
-                  <td style={tdStyle}>{fmt(s.peak_discharge_a, 'A', 0)}</td>
-                  <td style={tdStyle}>{fmt(s.max_temp_c, '°C', 0)}</td>
-                  <td style={tdStyle}>{fmt(s.max_cell_spread_mv, 'mV', 0)}</td>
-                  <td style={tdStyle}>{fmt(s.soh, '%')}</td>
-                  <td style={tdStyle}><ReportProvider value={{ t: enT, lang: 'en', print: false }}><WarningCounts w={s.warnings} /></ReportProvider></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-
 // --- report detail ------------------------------------------------------------------
 
 function ReportDetail({ id, version, aiStatus, headerButtons }) {
@@ -323,6 +192,8 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
   const [res, setRes] = useState(null);
   const [error, setError] = useState(null);
   const [showExport, setShowExport] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [reload, setReload] = useState(0);
   const [lang, setLang] = useState(() => {
     try { return localStorage.getItem('bms_lang') === 'zh' ? 'zh' : 'en'; } catch { return 'en'; }
   });
@@ -334,7 +205,7 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
       .then((r) => { if (!cancelled) { setRes(r); setError(null); } })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [id, version]);
+  }, [id, version, reload]);
 
   function switchLang(l) {
     setLang(l);
@@ -352,10 +223,27 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
     navigate('/bms');
   }
 
+  const assigned = res?.analysis?.assignment || null;
+  const sideName = (side) => (side ? t(`side_${side}`) : t('side_unknown'));
   const back = (
-    <button onClick={() => navigate('/bms')} style={{ ...linkBtn, display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-      <ArrowLeft size={14} /> {t('all_reports')}
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 13, marginBottom: 16 }}>
+      <ArrowLeft size={14} color={C.green} />
+      <button onClick={() => navigate('/bms')} style={linkBtn}>{t('bms_home')}</button>
+      {assigned?.truck != null && (
+        <>
+          <ChevronRight size={13} color={C.muted} />
+          <button onClick={() => navigate(`/bms/truck/${assigned.truck}`)} style={linkBtn}>{`Truck ${assigned.truck}`}</button>
+        </>
+      )}
+      {res?.analysis?.meta?.hwid && (
+        <>
+          <ChevronRight size={13} color={C.muted} />
+          <button onClick={() => navigate(`/bms/system/${encodeURIComponent(res.analysis.meta.hwid)}`)} style={linkBtn}>
+            {assigned?.side ? sideName(assigned.side) : t('open_system')}
+          </button>
+        </>
+      )}
+    </div>
   );
 
   if (error) return <>{back}<Banner level="critical" text={error} /></>;
@@ -367,14 +255,11 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
   const aiReady = !!aiStatus?.configured;
   const setReport = (patch) => setRes((r) => ({ ...r, report: { ...r.report, ...patch } }));
 
-  // Which side of the truck this battery is on — stored per battery (HWID) in the pack settings.
+  // Which truck and side this battery is on — saved per BMS serial (HWID).
+  // Changing the side changes the pack layout, so the report is reloaded.
   async function setMount(side) {
-    const { settings } = await api.getBmsSettings();
-    const mounts = { ...(settings.pack?.mounts || {}) };
-    if (side) mounts[a.meta.hwid] = side;
-    else delete mounts[a.meta.hwid];
-    await api.saveBmsSettings({ ...settings, pack: { ...settings.pack, mounts } });
-    setRes((r) => ({ ...r, analysis: { ...r.analysis, pack: { ...r.analysis.pack, mount: side } } }));
+    await api.setBmsSystem(a.meta.hwid, { truck: assigned?.truck ?? null, side });
+    setReload((n) => n + 1);
   }
 
   const extras = (
@@ -403,7 +288,23 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
             {a.meta.nominal_v && `${a.meta.nominal_v} V · ${a.meta.capacity_ah} Ah · ${fmt(a.meta.nominal_kwh, 'kWh')} · `}
             {a.meta.device_model} · {t('n_cells', { n: a.meta.cell_count })} · {t('n_temp_sensors', { n: a.meta.temp_sensor_count })} · HWID <code>{a.meta.hwid}</code>
           </div>
-          <div style={{ fontSize: 13, color: C.muted, marginTop: 2, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {a.meta.hwid && (
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {assigned?.truck != null ? (
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.text, background: '#2d5c2a55', border: `1px solid ${C.green}66`, borderRadius: 999, padding: '3px 10px' }}>
+                  {t('truck_side', { n: assigned.truck, side: sideName(assigned.side) })}
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, color: C.amber }}>{t('not_assigned')}</span>
+              )}
+              {canEdit && (
+                <button onClick={() => setAssigning(true)} style={{ ...linkBtn, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <ArrowLeftRight size={12} /> {assigned?.truck != null ? t('change_assign') : t('assign')}
+                </button>
+              )}
+            </div>
+          )}
+          <div style={{ fontSize: 13, color: C.muted, marginTop: 6, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             {t('charging_vehicles')}
             <EditableText value={report.vehicle} placeholder={t('set_vehicle')} canEdit={canEdit} onSave={(v) => saveField('vehicle', v)} style={{ fontSize: 13, color: C.text }} />
           </div>
@@ -423,6 +324,9 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
       </div>
 
       {showExport && <ExportDialog report={report} initialLang={lang} onClose={() => setShowExport(false)} />}
+      {assigning && (
+        <AssignDialog hwid={a.meta.hwid} current={assigned} onClose={() => setAssigning(false)} onSaved={() => { setAssigning(false); setReload((n) => n + 1); }} />
+      )}
     </ReportProvider>
   );
 }
@@ -536,9 +440,15 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
       const v = clean.pack[k];
       clean.pack[k] = v === '' || v == null ? defaults?.pack?.[k] ?? null : Number(v);
     }
-    clean.pack.modules = (clean.pack.modules || [])
-      .map((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v === '' || v == null ? null : Number(v)])))
-      .filter((m) => m.module && (m.cell_start || m.cell_end || m.sensor_start || m.sensor_end));
+    // Old settings fields replaced by the per-side layouts and truck assignments.
+    for (const k of ['modules', 'mounts', 'layout_columns', 'layout_rows']) delete clean.pack[k];
+    delete clean.fleet;
+    const bad = ['driver', 'passenger'].find((side) => layoutProblem(clean.pack.layouts?.[side], clean.pack));
+    if (bad) {
+      setMsg(`${SIDE_LABEL[bad]} layout: ${layoutProblem(clean.pack.layouts[bad], clean.pack)}`);
+      setSaving(false);
+      return;
+    }
     for (const g of ['limits', 'thresholds', 'events']) {
       for (const [k, v] of Object.entries(clean[g])) {
         if (k === 'vehicle_name') continue;
@@ -646,8 +556,22 @@ function NumberGrid({ fields, group, draft, defaults, setVal, disabled }) {
 }
 
 
-// Battery pack build: wiring, cells, and which BMS cell / sensor numbers
-// belong to each module position.
+// Battery pack build: wiring, cells, and where each BMS module sits on the
+// driver-side and passenger-side packs.
+function defaultGrid(series, parallel) {
+  // Column-wise: string 1 down the first column, string 2 the next, ...
+  return Array.from({ length: series }, (_, r) => Array.from({ length: parallel }, (_, c) => c * series + r + 1));
+}
+
+function layoutProblem(grid, p) {
+  const count = (Number(p.modules_in_series) || 1) * (Number(p.strings_in_parallel) || 1);
+  const flat = (grid || []).flat().map(Number);
+  if (flat.length !== count) return `needs ${count} positions, has ${flat.length}`;
+  const missing = Array.from({ length: count }, (_, i) => i + 1).filter((m) => !flat.includes(m));
+  if (missing.length) return `module ${missing.join(', ')} not placed (each module must appear exactly once)`;
+  return null;
+}
+
 function PackSettings({ draft, setDraft, defaults, disabled }) {
   const p = draft.pack || {};
   const set = (key, value) => setDraft((d) => ({ ...d, pack: { ...d.pack, [key]: value } }));
@@ -658,21 +582,25 @@ function PackSettings({ draft, setDraft, defaults, disabled }) {
   const spm = num(p.sensors_per_module) || 0;
   const cellV = num(p.cell_nominal_v) || 0;
   const cellAh = num(p.cell_capacity_ah) || 0;
-  const rows = num(p.layout_rows) || series;
   const count = series * parallel;
   const moduleV = cpm * cellV;
   const packV = moduleV * series;
   const packAh = cellAh * parallel;
   const r1 = (v) => Math.round(v * 10) / 10;
+  const layouts = p.layouts || defaults?.pack?.layouts || {};
 
-  const overrides = p.modules || [];
-  function setOverride(module, key, value) {
-    const list = [...overrides];
-    const i = list.findIndex((m) => Number(m.module) === module);
-    const row = i >= 0 ? { ...list[i] } : { module };
-    row[key] = value;
-    if (i >= 0) list[i] = row; else list.push(row);
-    set('modules', list);
+  function gridFor(side) {
+    const g = layouts[side];
+    return g && g.length === series && g.every((row) => row.length === parallel) ? g : defaultGrid(series, parallel);
+  }
+  function setCell(side, r, c, value) {
+    const g = gridFor(side).map((row) => [...row]);
+    g[r][c] = Number(value);
+    set('layouts', { ...layouts, [side]: g });
+  }
+  // Mirror left ↔ right: the two sides of a truck are mirror images.
+  function copyMirrored(from, to) {
+    set('layouts', { ...layouts, [to]: gridFor(from).map((row) => [...row].reverse()) });
   }
 
   return (
@@ -697,37 +625,53 @@ function PackSettings({ draft, setDraft, defaults, disabled }) {
         <br />
         Module: {r1(moduleV)} V · {r1((moduleV * cellAh) / 1000)} kWh &nbsp;·&nbsp; Pack: <strong>{r1(packV)} V · {Math.round(packAh)} Ah · {r1((packV * packAh) / 1000)} kWh</strong>
         <br />
-        <span style={{ color: C.muted }}>Modules are numbered down each column as seen standing outside the truck: 1 is top-left, then down, then the next column to the right. Each column is one series string.</span>
+        <span style={{ color: C.muted }}>BMS module k = cells {cpm ? `${cpm}(k−1)+1 … ${cpm}k` : '—'}{spm ? `, temperature sensors ${spm}(k−1)+1 … ${spm}k` : ''}. Modules 1–{series} are string 1, {series + 1}–{series * 2} string 2, and so on.</span>
       </div>
 
-      <div style={{ fontSize: 12, color: C.text, margin: '14px 0 6px' }}>Module map <span style={{ color: C.muted }}>(blank = automatic, in BMS order)</span></div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ ...tableStyle, fontSize: 12 }}>
-          <thead><tr>{['Module', 'Position', 'Cells from', 'to', 'Sensors from', 'to'].map((h) => <th key={h} style={{ ...thStyle, fontSize: 11, padding: '6px' }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {Array.from({ length: Math.min(count, 48) }, (_, i) => {
-              const m = i + 1;
-              const o = overrides.find((x) => Number(x.module) === m) || {};
-              const auto = { cell_start: (m - 1) * cpm + 1, cell_end: m * cpm, sensor_start: spm ? (m - 1) * spm + 1 : '', sensor_end: spm ? m * spm : '' };
-              const col = Math.floor((m - 1) / rows) + 1;
-              const row = ((m - 1) % rows) + 1;
-              return (
-                <tr key={m} style={{ borderTop: `1px solid ${C.border}` }}>
-                  <td style={{ ...tdStyle, padding: '4px 6px', color: C.text }}>{m}</td>
-                  <td style={{ ...tdStyle, padding: '4px 6px' }}>col {col}, row {row}</td>
-                  {['cell_start', 'cell_end', 'sensor_start', 'sensor_end'].map((k) => (
-                    <td key={k} style={{ padding: '3px 4px' }}>
-                      <input type="number" disabled={disabled} value={o[k] ?? ''} placeholder={String(auto[k])} onChange={(e) => setOverride(m, k, e.target.value)} style={{ ...inputStyle, width: 70, padding: '4px 6px', fontSize: 12 }} />
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div style={{ fontSize: 12, color: C.text, margin: '14px 0 4px' }}>Where each BMS module sits</div>
+      <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>
+        Standing outside the truck facing the pack, using the position labels printed on the pack (rows 1–{series} top to bottom, columns a–{'abcdefghij'[parallel - 1] || parallel} left to right). Pick the BMS module number at each position.
       </div>
-      {overrides.length > 0 && !disabled && (
-        <button onClick={() => set('modules', [])} style={{ ...linkBtn, fontSize: 12, marginTop: 6 }}>Reset module map to automatic</button>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        {['driver', 'passenger'].map((side) => {
+          const g = gridFor(side);
+          const problem = layoutProblem(g, p);
+          const other = side === 'driver' ? 'passenger' : 'driver';
+          return (
+            <div key={side} style={{ background: C.inner, borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+                {SIDE_LABEL[side]} <span style={{ color: C.muted, fontWeight: 400 }}>· front of truck {side === 'passenger' ? 'on the right' : 'on the left'}</span>
+              </div>
+              <table style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr><th />{g[0].map((_, c) => <th key={c} style={{ fontSize: 11, color: C.muted, fontWeight: 600, padding: 2 }}>{'abcdefghij'[c] || c + 1}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {g.map((row, r) => (
+                    <tr key={r}>
+                      <td style={{ fontSize: 11, color: C.muted, paddingRight: 4 }}>{r + 1}</td>
+                      {row.map((k, c) => (
+                        <td key={c} style={{ padding: 2 }}>
+                          <select disabled={disabled} value={k} onChange={(e) => setCell(side, r, c, e.target.value)} aria-label={`${SIDE_LABEL[side]} position ${r + 1}${'abcdefghij'[c]}`}
+                            style={{ ...inputStyle, width: 52, padding: '4px 4px', fontSize: 12 }}>
+                            {Array.from({ length: count }, (_, i) => <option key={i} value={i + 1}>M{i + 1}</option>)}
+                          </select>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {problem && <div style={{ fontSize: 11, color: C.amber, marginTop: 6, maxWidth: 200 }}>{problem}</div>}
+              {!disabled && (
+                <button onClick={() => copyMirrored(other, side)} style={{ ...linkBtn, fontSize: 11, marginTop: 6 }}>Mirror of {SIDE_LABEL[other].toLowerCase()}</button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!disabled && (
+        <button onClick={() => set('layouts', defaults?.pack?.layouts)} style={{ ...linkBtn, fontSize: 12, marginTop: 8 }}>Reset layouts to the Primecom pack</button>
       )}
     </>
   );
