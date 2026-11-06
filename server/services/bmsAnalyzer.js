@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS = {
     faults: true,
     gaps: true,
     comparison: true,
+    pack_view: true,
     trend: true,
     notes: true,
     ai_analysis: true,
@@ -70,6 +71,29 @@ const DEFAULT_SETTINGS = {
     charger_shortfall_pct: 80,
     current_limit_pct: 97,
   },
+  // Battery pack build. Defaults describe the Primecom system: 9 modules of
+  // 48 cells (16 temperature sensors each), 3 modules in series per string,
+  // 3 strings in parallel. Modules are numbered down each column (1-2-3 top to
+  // bottom, then 4-5-6, then 7-8-9) as seen standing outside the truck.
+  pack: {
+    system_name: 'Primecom battery system',
+    cell_maker: 'Gotion',
+    chemistry: 'LFP',
+    cell_nominal_v: 3.2,
+    cell_capacity_ah: 330,
+    cells_per_module: 48,
+    sensors_per_module: 16,
+    modules_in_series: 3,
+    strings_in_parallel: 3,
+    layout_columns: 3,
+    layout_rows: 3,
+    // Optional per-module overrides when the BMS numbering is not sequential:
+    // [{ module, cell_start, cell_end, sensor_start, sensor_end }]
+    modules: [],
+    // Which side of the truck each battery (by BMS HWID) is mounted on:
+    // { "<hwid>": "passenger" | "driver" }
+    mounts: {},
+  },
   events: {
     idle_current_a: 5,          // |current| below this = idle
     merge_gap_min: 5,           // pauses shorter than this stay in the same session
@@ -87,6 +111,12 @@ function mergeSettings(saved) {
     limits: { ...DEFAULT_SETTINGS.limits, ...(s.limits || {}) },
     thresholds: { ...DEFAULT_SETTINGS.thresholds, ...(s.thresholds || {}) },
     events: { ...DEFAULT_SETTINGS.events, ...(s.events || {}) },
+    pack: {
+      ...DEFAULT_SETTINGS.pack,
+      ...(s.pack || {}),
+      modules: Array.isArray(s.pack?.modules) ? s.pack.modules : [],
+      mounts: s.pack?.mounts && typeof s.pack.mounts === 'object' ? s.pack.mounts : {},
+    },
   };
 }
 
@@ -163,6 +193,9 @@ async function extractBmsLog(buffer) {
   let tempCols = [];
   let cellAcc = null;
   let tempAcc = null;
+  // Per-row raw values, compact, for the pack heat map snapshots.
+  const rowTemps = []; // Int16Array, °C × 10, -32768 = missing
+  const rowCells = []; // Uint16Array, mV, 0 = missing
 
   function find(re, from = 0) {
     for (let i = from; i < header.length; i++) if (re.test(String(header[i] ?? ''))) return i;
@@ -324,6 +357,8 @@ async function extractBmsLog(buffer) {
       signal: num(g('signal')),
     };
     for (const f of FIELDS) store[f].push(row[f]);
+    rowTemps.push(Int16Array.from(tv, (v) => (v == null ? -32768 : Math.round(v * 10))));
+    rowCells.push(Uint16Array.from(cv, (v) => (v == null ? 0 : Math.round(v))));
   });
 
   if (!header) throw new Error('The data sheet is empty');
@@ -333,6 +368,29 @@ async function extractBmsLog(buffer) {
   // Exports list newest first — put samples in time order.
   const order = [...Array(n).keys()].sort((a, b) => (store.t[a] ?? 0) - (store.t[b] ?? 0));
   for (const f of FIELDS) store[f] = order.map((k) => store[f][k]);
+
+  // Snapshots of every sensor and cell at ~96 moments through the log (plus
+  // the hottest moment and the widest cell spread), for the pack heat map.
+  const FRAME_COUNT = 96;
+  const pickSet = new Set();
+  for (let i = 0; i < FRAME_COUNT; i++) pickSet.add(Math.round((i * (n - 1)) / Math.max(1, FRAME_COUNT - 1)));
+  let kHot = 0, kSpread = 0;
+  for (let k = 0; k < n; k++) {
+    if ((store.max_t[k] ?? -1e9) > (store.max_t[kHot] ?? -1e9)) kHot = k;
+    if ((store.cell_spread_v[k] ?? -1) > (store.cell_spread_v[kSpread] ?? -1)) kSpread = k;
+  }
+  pickSet.add(kHot);
+  pickSet.add(kSpread);
+  const picks = [...pickSet].filter((k) => k >= 0 && k < n).sort((a, b) => a - b);
+  store.frames = {
+    t: picks.map((k) => store.t[k]),
+    soc: picks.map((k) => store.soc[k]),
+    kw: picks.map((k) => (store.v[k] != null && store.i[k] != null ? Math.round((store.v[k] * store.i[k]) / 100) / 10 : null)),
+    temps: picks.map((k) => Array.from(rowTemps[order[k]], (v) => (v === -32768 ? null : v / 10))),
+    cells: picks.map((k) => Array.from(rowCells[order[k]], (v) => (v === 0 ? null : v))),
+    hottest_index: picks.indexOf(kHot),
+    spread_index: picks.indexOf(kSpread),
+  };
 
   const cellStats = cellAcc.filter((a) => a.cnt).map((a) => ({
     n: a.n, min_mv: a.min, max_mv: a.max, avg_mv: round(a.sum / a.cnt, 1),
@@ -366,6 +424,113 @@ async function extractBmsLog(buffer) {
     data: store,
     cell_stats: cellStats,
     temp_stats: tempStats,
+  };
+}
+
+// --- pack layout ------------------------------------------------------------------------
+
+// Builds the physical pack picture from the pack settings: which cells and
+// temperature sensors belong to each module, where the module sits in the
+// stack, which series string it is part of, and per-module statistics.
+function buildPack(P, meta, cellStats, tempStats) {
+  const series = Math.max(1, Math.round(P.modules_in_series || 1));
+  const parallel = Math.max(1, Math.round(P.strings_in_parallel || 1));
+  const count = series * parallel;
+  const cpm = Math.max(1, Math.round(P.cells_per_module || 1));
+  const spm = Math.max(0, Math.round(P.sensors_per_module || 0));
+  const rows = Math.max(1, Math.round(P.layout_rows || series));
+  const cols = Math.max(1, Math.round(P.layout_columns || Math.ceil(count / rows)));
+  const cellsByN = new Map(cellStats.map((c) => [c.n, c]));
+  const tempsByN = new Map(tempStats.map((t) => [t.n, t]));
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+
+  const modules = [];
+  for (let m = 1; m <= count; m++) {
+    const o = (P.modules || []).find((x) => Number(x.module) === m) || {};
+    const cellStart = Number(o.cell_start) || (m - 1) * cpm + 1;
+    const cellEnd = Number(o.cell_end) || m * cpm;
+    const sensorStart = Number(o.sensor_start) || (spm ? (m - 1) * spm + 1 : null);
+    const sensorEnd = Number(o.sensor_end) || (spm ? m * spm : null);
+
+    const cells = [];
+    for (let c = cellStart; c <= cellEnd; c++) if (cellsByN.has(c)) cells.push(cellsByN.get(c));
+    const sensors = [];
+    if (sensorStart) for (let t = sensorStart; t <= sensorEnd; t++) if (tempsByN.has(t)) sensors.push(tempsByN.get(t));
+
+    const weakest = cells.reduce((w, c) => (!w || c.avg_dev_mv < w.avg_dev_mv ? c : w), null);
+    const hottest = sensors.reduce((h, t) => (!h || t.avg_dev_c > h.avg_dev_c ? t : h), null);
+    modules.push({
+      module: m,
+      string: Math.floor((m - 1) / series) + 1,
+      column: Math.floor((m - 1) / rows) + 1,
+      row: ((m - 1) % rows) + 1,
+      cell_start: cellStart,
+      cell_end: cellEnd,
+      sensor_start: sensorStart,
+      sensor_end: sensorEnd,
+      cells_found: cells.length,
+      sensors_found: sensors.length,
+      avg_temp_c: round(mean(sensors.map((t) => t.avg_c)), 1),
+      max_temp_c: sensors.length ? Math.max(...sensors.map((t) => t.max_c)) : null,
+      min_temp_c: sensors.length ? Math.min(...sensors.map((t) => t.min_c)) : null,
+      temp_vs_pack_c: round(mean(sensors.map((t) => t.avg_dev_c)), 2),
+      hottest_pct: round(sensors.reduce((a, t) => a + (t.hottest_pct || 0), 0), 1),
+      hottest_sensor: hottest ? hottest.n : null,
+      cell_vs_pack_mv: round(mean(cells.map((c) => c.avg_dev_mv)), 1),
+      cell_spread_mv: cells.length ? round(Math.max(...cells.map((c) => c.avg_mv)) - Math.min(...cells.map((c) => c.avg_mv)), 1) : null,
+      lowest_cell_v: cells.length ? Math.min(...cells.map((c) => c.min_mv)) / 1000 : null,
+      lowest_pct: round(cells.reduce((a, c) => a + (c.lowest_pct || 0), 0), 1),
+      weakest_cell: weakest ? weakest.n : null,
+      weakest_cell_mv: weakest ? weakest.avg_dev_mv : null,
+    });
+  }
+
+  const strings = [];
+  for (let s = 1; s <= parallel; s++) {
+    const ms = modules.filter((m) => m.string === s);
+    strings.push({
+      string: s,
+      modules: ms.map((m) => m.module),
+      avg_temp_c: round(mean(ms.map((m) => m.avg_temp_c).filter((v) => v != null)), 1),
+      cell_vs_pack_mv: round(mean(ms.map((m) => m.cell_vs_pack_mv).filter((v) => v != null)), 1),
+    });
+  }
+
+  const moduleV = cpm * (P.cell_nominal_v || 0);
+  const packV = moduleV * series;
+  const packAh = (P.cell_capacity_ah || 0) * parallel;
+  const spec = {
+    module_v: round(moduleV, 1),
+    module_kwh: round((moduleV * (P.cell_capacity_ah || 0)) / 1000, 1),
+    pack_v: round(packV, 1),
+    pack_ah: round(packAh, 0),
+    pack_kwh: round((packV * packAh) / 1000, 1),
+    total_cells: cpm * count,
+    total_sensors: spm * count,
+    module_count: count,
+  };
+  const checks = [
+    { key: 'cells', expected: spec.total_cells, file: meta.cell_count ?? null },
+    { key: 'sensors', expected: spec.total_sensors, file: meta.temp_sensor_count ?? null },
+    { key: 'voltage', expected: spec.pack_v, file: meta.nominal_v ?? null },
+    { key: 'capacity', expected: spec.pack_ah, file: meta.capacity_ah ?? null },
+  ].map((c) => ({ ...c, ok: c.file == null || Math.abs(c.file - c.expected) <= Math.max(1, c.expected * 0.01) }));
+
+  const ranked = modules.filter((m) => m.avg_temp_c != null).sort((a, b) => b.avg_temp_c - a.avg_temp_c);
+  return {
+    config: {
+      system_name: P.system_name, cell_maker: P.cell_maker, chemistry: P.chemistry,
+      cell_nominal_v: P.cell_nominal_v, cell_capacity_ah: P.cell_capacity_ah,
+      cells_per_module: cpm, sensors_per_module: spm, modules_in_series: series, strings_in_parallel: parallel,
+      layout_columns: cols, layout_rows: rows,
+    },
+    spec,
+    checks,
+    mount: P.mounts?.[meta.hwid] || null,
+    modules,
+    strings,
+    hottest_module: ranked[0]?.module ?? null,
+    coolest_module: ranked[ranked.length - 1]?.module ?? null,
   };
 }
 
@@ -762,6 +927,8 @@ function analyzeBmsLog(extracted, savedSettings) {
       all: cellStats,
     },
     temps: { count: meta.temp_sensor_count, hottest: hotSensors, all: tempStats },
+    pack: buildPack(S.pack, meta, cellStats, tempStats),
+    frames: d.frames || null,
     gaps,
     faults: faults.map(({ key, ...f }) => f),
     series,

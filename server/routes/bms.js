@@ -150,13 +150,23 @@ router.post(
       // Same battery + same time window + same length = already uploaded.
       const { data: dupe } = await supabase
         .from('bms_reports')
-        .select('id')
+        .select('id, data->frames->t')
         .eq('hwid', meta.hwid)
         .eq('start_time', startIso)
         .eq('end_time', endIso)
         .eq('row_count', summary.samples)
         .maybeSingle();
-      if (dupe) return res.json({ id: dupe.id, duplicate: true });
+      if (dupe) {
+        // Uploaded before pack snapshots existed: refresh the stored data.
+        if (!dupe.t) {
+          await supabase
+            .from('bms_reports')
+            .update({ meta: extracted.meta, data: extracted.data, cell_stats: extracted.cell_stats, temp_stats: extracted.temp_stats, summary })
+            .eq('id', dupe.id);
+          return res.json({ id: dupe.id, duplicate: true, refreshed: true });
+        }
+        return res.json({ id: dupe.id, duplicate: true });
+      }
 
       // Carry the battery's name and vehicle over from its previous report.
       const { data: prev } = await supabase

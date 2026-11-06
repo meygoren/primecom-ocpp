@@ -18,6 +18,7 @@ import BmsRequests from '../components/bms/BmsRequests';
 const SECTIONS = [
   ['overview', 'Overview tiles', 'Energy in/out, peak and average power, SOC, SOH, temperatures'],
   ['warnings', 'Warnings', 'Everything the analysis flagged, most serious first'],
+  ['pack_view', 'Pack view', 'Pack drawn as seen from outside the truck: heat map per module, cell balance, playback over time'],
   ['comparison', 'Compared with previous log', 'Changes since the last log from the same battery'],
   ['trend', 'Trend across logs', 'Day-by-day direction of each metric across every log for the battery'],
   ['notes', 'Team notes', 'Your own observations about the log'],
@@ -65,6 +66,23 @@ const THRESHOLD_FIELDS = [
   ['interruptions_warn', 'Charging restarts per session', ''],
   ['charger_shortfall_pct', 'Charger delivered < requested', '%'],
   ['current_limit_pct', 'Counts as "at current limit" from', '% of limit'],
+];
+
+const PACK_TEXT_FIELDS = [
+  ['system_name', 'System name'],
+  ['cell_maker', 'Cell maker'],
+  ['chemistry', 'Cell chemistry'],
+];
+
+const PACK_NUMBER_FIELDS = [
+  ['cell_nominal_v', 'Cell nominal voltage', 'V'],
+  ['cell_capacity_ah', 'Cell capacity', 'Ah'],
+  ['cells_per_module', 'Cells per module (in series)', ''],
+  ['sensors_per_module', 'Temperature sensors per module', ''],
+  ['modules_in_series', 'Modules in series per string', ''],
+  ['strings_in_parallel', 'Strings in parallel', ''],
+  ['layout_columns', 'Columns of modules (left → right)', ''],
+  ['layout_rows', 'Rows of modules (top → bottom)', ''],
 ];
 
 const EVENT_FIELDS = [
@@ -349,6 +367,16 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
   const aiReady = !!aiStatus?.configured;
   const setReport = (patch) => setRes((r) => ({ ...r, report: { ...r.report, ...patch } }));
 
+  // Which side of the truck this battery is on — stored per battery (HWID) in the pack settings.
+  async function setMount(side) {
+    const { settings } = await api.getBmsSettings();
+    const mounts = { ...(settings.pack?.mounts || {}) };
+    if (side) mounts[a.meta.hwid] = side;
+    else delete mounts[a.meta.hwid];
+    await api.saveBmsSettings({ ...settings, pack: { ...settings.pack, mounts } });
+    setRes((r) => ({ ...r, analysis: { ...r.analysis, pack: { ...r.analysis.pack, mount: side } } }));
+  }
+
   const extras = (
     <>
       {on.notes !== false && <TeamNotes report={report} canEdit={canEdit} onSaved={(notes) => setReport({ notes })} />}
@@ -358,7 +386,7 @@ function ReportDetail({ id, version, aiStatus, headerButtons }) {
   );
 
   return (
-    <ReportProvider value={{ t, lang, print: false }}>
+    <ReportProvider value={{ t, lang, print: false, canEdit, onSetMount: a.meta.hwid ? setMount : null }}>
       {back}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <div style={{ minWidth: 0 }}>
@@ -504,6 +532,13 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
     setMsg(null);
     // Numbers come back from inputs as strings; keep text fields as text.
     const clean = JSON.parse(JSON.stringify(draft));
+    for (const k of PACK_NUMBER_FIELDS.map(([key]) => key)) {
+      const v = clean.pack[k];
+      clean.pack[k] = v === '' || v == null ? defaults?.pack?.[k] ?? null : Number(v);
+    }
+    clean.pack.modules = (clean.pack.modules || [])
+      .map((m) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v === '' || v == null ? null : Number(v)])))
+      .filter((m) => m.module && (m.cell_start || m.cell_end || m.sensor_start || m.sensor_end));
     for (const g of ['limits', 'thresholds', 'events']) {
       for (const [k, v] of Object.entries(clean[g])) {
         if (k === 'vehicle_name') continue;
@@ -558,6 +593,9 @@ function SettingsPanel({ settings, defaults, onClose, onSaved }) {
           <SettingsGroup title="Warning thresholds">
             <NumberGrid fields={THRESHOLD_FIELDS} group="thresholds" draft={draft} defaults={defaults} setVal={setVal} disabled={!canEdit} />
           </SettingsGroup>
+          <SettingsGroup title="Battery pack">
+            <PackSettings draft={draft} setDraft={setDraft} defaults={defaults} disabled={!canEdit} />
+          </SettingsGroup>
           <SettingsGroup title="Session detection">
             <NumberGrid fields={EVENT_FIELDS} group="events" draft={draft} defaults={defaults} setVal={setVal} disabled={!canEdit} />
           </SettingsGroup>
@@ -604,6 +642,94 @@ function NumberGrid({ fields, group, draft, defaults, setVal, disabled }) {
         </label>
       ))}
     </div>
+  );
+}
+
+
+// Battery pack build: wiring, cells, and which BMS cell / sensor numbers
+// belong to each module position.
+function PackSettings({ draft, setDraft, defaults, disabled }) {
+  const p = draft.pack || {};
+  const set = (key, value) => setDraft((d) => ({ ...d, pack: { ...d.pack, [key]: value } }));
+  const num = (v) => (v === '' || v == null ? NaN : Number(v));
+  const series = num(p.modules_in_series) || 1;
+  const parallel = num(p.strings_in_parallel) || 1;
+  const cpm = num(p.cells_per_module) || 0;
+  const spm = num(p.sensors_per_module) || 0;
+  const cellV = num(p.cell_nominal_v) || 0;
+  const cellAh = num(p.cell_capacity_ah) || 0;
+  const rows = num(p.layout_rows) || series;
+  const count = series * parallel;
+  const moduleV = cpm * cellV;
+  const packV = moduleV * series;
+  const packAh = cellAh * parallel;
+  const r1 = (v) => Math.round(v * 10) / 10;
+
+  const overrides = p.modules || [];
+  function setOverride(module, key, value) {
+    const list = [...overrides];
+    const i = list.findIndex((m) => Number(m.module) === module);
+    const row = i >= 0 ? { ...list[i] } : { module };
+    row[key] = value;
+    if (i >= 0) list[i] = row; else list.push(row);
+    set('modules', list);
+  }
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+        {PACK_TEXT_FIELDS.map(([key, label]) => (
+          <label key={key} style={{ display: 'block' }}>
+            <div style={{ fontSize: 12, color: C.text, marginBottom: 4 }}>{label}</div>
+            <input disabled={disabled} value={p[key] ?? ''} placeholder={defaults?.pack?.[key] || ''} onChange={(e) => set(key, e.target.value)} style={inputStyle} />
+          </label>
+        ))}
+        {PACK_NUMBER_FIELDS.map(([key, label, unit]) => (
+          <label key={key} style={{ display: 'block' }}>
+            <div style={{ fontSize: 12, color: C.text, marginBottom: 4 }}>{label}{unit && <span style={{ color: C.muted }}> ({unit})</span>}</div>
+            <input type="number" step="any" disabled={disabled} value={p[key] ?? ''} placeholder={String(defaults?.pack?.[key] ?? '')} onChange={(e) => set(key, e.target.value)} style={inputStyle} />
+          </label>
+        ))}
+      </div>
+
+      <div style={{ background: C.inner, borderRadius: 8, padding: '10px 12px', marginTop: 12, fontSize: 12.5, color: C.text, lineHeight: 1.7 }}>
+        {parallel} strings × {series} modules in series = <strong>{count} modules</strong>, {cpm * count} cells, {spm * count} temperature sensors
+        <br />
+        Module: {r1(moduleV)} V · {r1((moduleV * cellAh) / 1000)} kWh &nbsp;·&nbsp; Pack: <strong>{r1(packV)} V · {Math.round(packAh)} Ah · {r1((packV * packAh) / 1000)} kWh</strong>
+        <br />
+        <span style={{ color: C.muted }}>Modules are numbered down each column as seen standing outside the truck: 1 is top-left, then down, then the next column to the right. Each column is one series string.</span>
+      </div>
+
+      <div style={{ fontSize: 12, color: C.text, margin: '14px 0 6px' }}>Module map <span style={{ color: C.muted }}>(blank = automatic, in BMS order)</span></div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ ...tableStyle, fontSize: 12 }}>
+          <thead><tr>{['Module', 'Position', 'Cells from', 'to', 'Sensors from', 'to'].map((h) => <th key={h} style={{ ...thStyle, fontSize: 11, padding: '6px' }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {Array.from({ length: Math.min(count, 48) }, (_, i) => {
+              const m = i + 1;
+              const o = overrides.find((x) => Number(x.module) === m) || {};
+              const auto = { cell_start: (m - 1) * cpm + 1, cell_end: m * cpm, sensor_start: spm ? (m - 1) * spm + 1 : '', sensor_end: spm ? m * spm : '' };
+              const col = Math.floor((m - 1) / rows) + 1;
+              const row = ((m - 1) % rows) + 1;
+              return (
+                <tr key={m} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td style={{ ...tdStyle, padding: '4px 6px', color: C.text }}>{m}</td>
+                  <td style={{ ...tdStyle, padding: '4px 6px' }}>col {col}, row {row}</td>
+                  {['cell_start', 'cell_end', 'sensor_start', 'sensor_end'].map((k) => (
+                    <td key={k} style={{ padding: '3px 4px' }}>
+                      <input type="number" disabled={disabled} value={o[k] ?? ''} placeholder={String(auto[k])} onChange={(e) => setOverride(m, k, e.target.value)} style={{ ...inputStyle, width: 70, padding: '4px 6px', fontSize: 12 }} />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {overrides.length > 0 && !disabled && (
+        <button onClick={() => set('modules', [])} style={{ ...linkBtn, fontSize: 12, marginTop: 6 }}>Reset module map to automatic</button>
+      )}
+    </>
   );
 }
 

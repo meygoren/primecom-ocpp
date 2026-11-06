@@ -1,6 +1,7 @@
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ResponsiveContainer } from 'recharts';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { warningText } from '../../lib/bmsI18n';
+import PackView from './BmsPack';
 import {
   C, LEVEL, useReport, n, fmt, fmtDate, fmtDay, fmtMin, linkBtn, cardStyle, tableStyle, thStyle, tdStyle,
   tooltipStyle, rowStyle, axisTick, chartMargin, timeAxis,
@@ -21,6 +22,7 @@ export function ReportBody({ data, onOpenReport, extras }) {
     <>
       {on.overview && <Overview s={s} limits={a.settings.limits} />}
       {on.warnings && <Warnings warnings={a.warnings} />}
+      {on.pack_view !== false && a.pack && <PackView a={a} />}
       {on.comparison && <Comparison s={s} previous={previous} onOpen={onOpenReport} />}
       {on.trend !== false && <Trend trend={trend} />}
       {extras}
@@ -231,12 +233,12 @@ function Trend({ trend }) {
 }
 
 function Events({ events, limits }) {
-  const { t, lang } = useReport();
+  const { t, lang, print } = useReport();
   return (
     <Section title={t('sessions')} subtitle={t('sessions_sub')}>
       {events.length === 0 ? <div style={{ color: C.muted, fontSize: 13 }}>{t('sessions_none')}</div> : (
         <TableWrap>
-          <table style={{ ...tableStyle, minWidth: 1100 }}>
+          <table style={{ ...tableStyle, minWidth: print ? 0 : 1100 }}>
             <thead>
               <tr>{['col_type', 'col_start', 'col_duration', 'col_energy', 'col_avg_kw', 'col_peak_kw', 'col_avg_a', 'col_peak_a', 'col_soc', 'col_temp', 'col_min_cell', 'col_spread', 'col_notes'].map((h) => <th key={h} style={thStyle}>{t(h)}</th>)}</tr>
             </thead>
