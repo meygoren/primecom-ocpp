@@ -46,6 +46,7 @@ const truckMapRouter = require('./routes/truckMap');
 const fleetsRouter = require('./routes/fleets');
 const batterySystemsRouter = require('./routes/batterySystems');
 const bmsRouter = require('./routes/bms');
+const bmsReferenceRouter = require('./routes/bmsReference');
 
 const PORT = process.env.PORT || 3000;
 const HEARTBEAT_TIMEOUT_MS = 90 * 1000; // 90 seconds
@@ -94,6 +95,7 @@ app.use('/api/truck-map', truckMapRouter);
 app.use('/api/fleets', fleetsRouter);
 app.use('/api/battery-systems', batterySystemsRouter);
 app.use('/api/bms', bmsRouter);
+app.use('/api/bms-reference', bmsReferenceRouter);
 
 // --- HTTP server (shared between Express and WebSocket) ---
 const server = http.createServer(app);

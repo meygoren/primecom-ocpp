@@ -328,6 +328,23 @@ export const api = {
   updateBmsRequest: (id, body) => request(`/api/bms/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteBmsRequest: (id) => request(`/api/bms/requests/${id}`, { method: 'DELETE' }),
   // Sends the .xlsx as the raw request body (not JSON) — BMS exports are large.
+  // Battery reference data (platform owner only)
+  getBmsReference: () => request('/api/bms-reference'),
+  saveBmsReference: (body) => request('/api/bms-reference', { method: 'PUT', body: JSON.stringify(body) }),
+  downloadBmsReferenceFile: (path) => api.downloadExport(`/api/bms-reference/file?path=${encodeURIComponent(path)}`),
+  deleteBmsReferenceFile: (path) => request(`/api/bms-reference/file?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+  uploadBmsReferenceFile: async (file) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch(`${BASE}/api/bms-reference/files?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
   uploadBmsReport: async (file) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
