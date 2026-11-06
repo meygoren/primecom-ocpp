@@ -23,7 +23,7 @@ const enT = makeT('en');
 const SIDES = ['driver', 'passenger'];
 const SIDE_LABEL = { driver: 'Driver side', passenger: 'Passenger side' };
 const PERIODS = [[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, '1 year']];
-const DEFAULT_LAYOUTS = { driver: [[1, 6, 7], [2, 5, 8], [3, 4, 9]], passenger: [[7, 6, 1], [8, 5, 2], [9, 4, 3]] };
+const DEFAULT_LAYOUTS = { driver: [[7, 6, 1], [8, 5, 2], [9, 4, 3]], passenger: [[1, 6, 7], [2, 5, 8], [3, 4, 9]] };
 
 function canEditRole(profile) { return profile?.role === 'admin' || profile?.role === 'operator'; }
 function shortId(id) { return id ? `${String(id).slice(0, 6)}…${String(id).slice(-4)}` : '—'; }

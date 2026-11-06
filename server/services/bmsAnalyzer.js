@@ -90,11 +90,13 @@ const DEFAULT_SETTINGS = {
     // labels printed on the packs). BMS module k = cells 48(k-1)+1 … 48k and
     // temperature sensors 16(k-1)+1 … 16k; modules 1-3, 4-6, 7-9 are the
     // three series strings. From the Primecom pack photos: the middle column
-    // is numbered bottom-up and the two sides are mirror images (the control
-    // box end faces the front of the truck).
+    // is numbered bottom-up and the two sides are mirror images. The power
+    // distribution box on top of the pack sits at the back of the truck (the
+    // charger is right behind it), so it is on the right of the driver-side
+    // pack and on the left of the passenger-side pack.
     layouts: {
-      driver: [[1, 6, 7], [2, 5, 8], [3, 4, 9]],
-      passenger: [[7, 6, 1], [8, 5, 2], [9, 4, 3]],
+      driver: [[7, 6, 1], [8, 5, 2], [9, 4, 3]],
+      passenger: [[1, 6, 7], [2, 5, 8], [3, 4, 9]],
     },
   },
   // Which truck and side each battery system (BMS HWID) belongs to:
