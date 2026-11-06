@@ -33,6 +33,7 @@ import TruckMap from './pages/TruckMap';
 import LocationDashboard from './pages/LocationDashboard';
 import Locations from './pages/Locations';
 import BmsReports from './pages/BmsReports';
+import BmsReportPrint from './pages/BmsReportPrint';
 
 function Layout({ children }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -114,6 +115,8 @@ export default function App() {
           <Route path="/locations" element={<PrivateRoute session={session}><Locations /></PrivateRoute>} />
           <Route path="/bms" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
           <Route path="/bms/:id" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
+          {/* PDF / print view: no sidebar, still requires sign-in */}
+          <Route path="/bms/:id/print" element={session ? <BmsReportPrint /> : <Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
