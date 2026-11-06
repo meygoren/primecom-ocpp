@@ -66,6 +66,7 @@ How the system works:
 - Each Primecom battery system is a ~456 kWh pack (460.8 V nominal, 990 Ah, 432 cells, 144 temperature sensors; cell voltages around 3.2–3.6 V suggest LFP chemistry). The BMS reports one reading about every 32 seconds.
 - The battery is recharged from AC-DC chargers (rated 480 kW each) that Primecom manages over OCPP.
 - The battery discharges through DC-DC chargers into customer vehicles — currently Hyundai Ioniq 5s for this battery (about 54 kWh for a typical 10→80% charge). Several vehicles can charge at once.
+- The pack is 9 modules (48 cells, 16 temperature sensors each) in a 3×3 stack: 3 modules in series per string, 3 strings in parallel. Each truck carries two packs, one on the passenger side and one on the driver side, facing outward. The JSON includes per-module temperature and cell balance with the physical position of each module — use it to say where in the stack heat or weak cells are.
 - In these logs, negative pack current means discharging to vehicles and positive means charging from the AC-DC charger. The discharge current limit is 990 A and the system is rated about 450 kW.
 - Higher cell temperatures make the BMS reduce allowed current, so output drops as the pack heats up.
 
@@ -116,6 +117,20 @@ function buildContext({ report, analysis, previous, trend }) {
     sessions: a.events,
     temperature_vs_power: a.derating,
     extremes: a.extremes,
+    pack_layout: a.pack ? {
+      build: a.pack.config,
+      spec: a.pack.spec,
+      truck: a.assignment?.truck ?? 'not assigned',
+      mounted_on: a.pack.mount ? `${a.pack.mount} side of the truck, facing outward` : 'not set (layout shown as driver side)',
+      layout_note: 'Positions use the labels printed on the pack, as seen standing outside the truck facing it: rows 1 (top) to 3 (bottom), columns a to c (left to right). "module" is the BMS module number (cells 48(k-1)+1..48k, sensors 16(k-1)+1..16k). Each column is one series string; the three strings are in parallel. The middle column is numbered bottom-up, and the passenger and driver packs are mirror images.',
+      modules: a.pack.modules.map((m) => ({
+        position: m.position, module: m.module, string: m.string,
+        cells: `${m.cell_start}-${m.cell_end}`, sensors: m.sensor_start ? `${m.sensor_start}-${m.sensor_end}` : null,
+        avg_temp_c: m.avg_temp_c, max_temp_c: m.max_temp_c, temp_vs_pack_c: m.temp_vs_pack_c,
+        cell_vs_pack_mv: m.cell_vs_pack_mv, weakest_cell: m.weakest_cell, hottest_sensor: m.hottest_sensor,
+      })),
+      strings: a.pack.strings,
+    } : null,
     weakest_cells: a.cells.weakest.slice(0, 6),
     hottest_sensors: a.temps.hottest.slice(0, 6),
     balancing_pct_of_readings: a.cells.balancing_pct,

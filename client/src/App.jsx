@@ -114,6 +114,8 @@ export default function App() {
           <Route path="/truck-map" element={<PrivateRoute session={session}><TruckMap /></PrivateRoute>} />
           <Route path="/locations" element={<PrivateRoute session={session}><Locations /></PrivateRoute>} />
           <Route path="/bms" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
+          <Route path="/bms/truck/:truck" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
+          <Route path="/bms/system/:hwid" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
           <Route path="/bms/:id" element={<PrivateRoute session={session}><BmsReports /></PrivateRoute>} />
           {/* PDF / print view: no sidebar, still requires sign-in */}
           <Route path="/bms/:id/print" element={session ? <BmsReportPrint /> : <Navigate to="/login" replace />} />

@@ -99,7 +99,10 @@ router.get('/settings', anyRole, async (_req, res) => {
 
 // PUT /api/bms/settings — body: { settings: { sections, limits, thresholds, events } }
 router.put('/settings', operatorUp, async (req, res) => {
-  const settings = mergeSettings(req.body?.settings);
+  // Truck assignments are saved through PUT /systems/:hwid only; keep the
+  // stored ones so a settings panel opened earlier cannot undo them.
+  const current = await loadSettings();
+  const settings = mergeSettings({ ...req.body?.settings, fleet: current.fleet, pack: { ...req.body?.settings?.pack, mounts: {} } });
   const { error } = await supabase
     .from('bms_settings')
     .upsert({ id: 1, settings, updated_at: new Date().toISOString() });
@@ -150,13 +153,23 @@ router.post(
       // Same battery + same time window + same length = already uploaded.
       const { data: dupe } = await supabase
         .from('bms_reports')
-        .select('id')
+        .select('id, data->frames->t')
         .eq('hwid', meta.hwid)
         .eq('start_time', startIso)
         .eq('end_time', endIso)
         .eq('row_count', summary.samples)
         .maybeSingle();
-      if (dupe) return res.json({ id: dupe.id, duplicate: true });
+      if (dupe) {
+        // Uploaded before pack snapshots existed: refresh the stored data.
+        if (!dupe.t) {
+          await supabase
+            .from('bms_reports')
+            .update({ meta: extracted.meta, data: extracted.data, cell_stats: extracted.cell_stats, temp_stats: extracted.temp_stats, summary })
+            .eq('id', dupe.id);
+          return res.json({ id: dupe.id, duplicate: true, refreshed: true, hwid: meta.hwid, assignment: settings.fleet.systems[meta.hwid] || null });
+        }
+        return res.json({ id: dupe.id, duplicate: true, hwid: meta.hwid, assignment: settings.fleet.systems[meta.hwid] || null });
+      }
 
       // Carry the battery's name and vehicle over from its previous report.
       const { data: prev } = await supabase
@@ -192,7 +205,7 @@ router.post(
       if (error) throw new Error(`${error.message} — ${MIGRATION_HINT}`);
 
       console.log(`[BMS] Uploaded ${fileName}: ${summary.samples} samples, ${summary.warnings.warning} warnings`);
-      res.json({ id: data.id, duplicate: false });
+      res.json({ id: data.id, duplicate: false, hwid: meta.hwid, assignment: settings.fleet.systems[meta.hwid] || null });
     } catch (err) {
       console.error(`[BMS] Upload failed for ${fileName}:`, err.message);
       res.status(500).json({ error: err.message });
@@ -694,6 +707,251 @@ router.put('/request-settings', adminOnly, async (req, res) => {
   if (error) return res.status(500).json({ error: `${error.message} — ${REQUESTS_HINT}` });
   const recipients = await requestRecipients();
   res.json({ emails, effective: recipients.emails, email_configured: !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM_EMAIL) });
+});
+
+// --- trucks & battery systems ---------------------------------------------------
+// 6 trucks (the Charge Trucks list), each with a passenger-side and a
+// driver-side battery system. Each system is identified by the BMS HWID in
+// its log files; settings.fleet.systems maps HWID → { truck, side }.
+//
+// What is compared where:
+//   per system — cell balance, weak cells, module heat map, SOH, insulation,
+//                faults: hardware-specific, only meaningful against itself.
+//   per truck  — passenger vs driver: same trips, same ambient, same
+//                vehicles — differences in energy share, temperature, SOH or
+//                capacity point at one side.
+//   fleet      — energy delivered, usable capacity, time to discharge,
+//                cycles, SOH: same design, so outliers stand out.
+
+const SIDES = ['driver', 'passenger'];
+
+async function truckList() {
+  const { data } = await supabase.from('charge_trucks').select('truck_number, label').order('truck_number');
+  const rows = (data || []).filter((t) => t.truck_number != null);
+  if (rows.length) return rows.map((t) => ({ truck: Number(t.truck_number), name: t.label || `Truck ${t.truck_number}` }));
+  return [1, 2, 3, 4, 5, 6].map((n) => ({ truck: n, name: `Truck ${n}` }));
+}
+
+// Report summaries (no time series), refreshing ones written by older code.
+async function loadSummaries({ hwid, since, settings } = {}) {
+  let q = supabase
+    .from('bms_reports')
+    .select('id, hwid, label, file_name, start_time, end_time, summary')
+    .order('start_time', { ascending: false })
+    .limit(2000);
+  if (hwid) q = q.eq('hwid', hwid);
+  if (since) q = q.gte('start_time', since);
+  const { data, error } = await q;
+  if (error) throw new Error(`${error.message} — ${MIGRATION_HINT}`);
+
+  let refreshed = 0;
+  for (const row of data || []) {
+    if (row.summary?.summary_version === SUMMARY_VERSION || refreshed >= 40) continue;
+    const { data: full } = await supabase.from('bms_reports').select('*').eq('id', row.id).single();
+    if (!full?.data) continue;
+    row.summary = analyzeBmsLog(toExtracted(full), settings).summary;
+    await supabase.from('bms_reports').update({ summary: row.summary }).eq('id', row.id);
+    refreshed++;
+  }
+  return data || [];
+}
+
+const avg = (xs) => { const v = xs.filter((x) => x != null && Number.isFinite(Number(x))).map(Number); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+const sum = (xs) => xs.reduce((a, x) => a + (Number(x) || 0), 0);
+const r1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
+const r2 = (v) => (v == null ? null : Math.round(v * 100) / 100);
+
+// Position label (e.g. "2b") of a BMS module number on a given side.
+function positionOf(settings, side, module) {
+  if (!module) return null;
+  const grid = settings.pack.layouts[side] || settings.pack.layouts.driver;
+  for (let r = 0; r < grid.length; r++) {
+    const c = grid[r].indexOf(module);
+    if (c >= 0) return `${r + 1}${'abcdefghij'[c]}`;
+  }
+  return null;
+}
+
+// Headline numbers for one system over a set of its logs (newest first).
+function systemStats(logs, settings, side) {
+  const s = logs.map((l) => l.summary || {});
+  const latest = s[0] || {};
+  const hottest = {};
+  for (const x of s) if (x.hottest_module) hottest[x.hottest_module] = (hottest[x.hottest_module] || 0) + 1;
+  const topHot = Object.entries(hottest).sort((a, b) => b[1] - a[1])[0];
+  return {
+    logs: logs.length,
+    last_log: logs[0]?.start_time || null,
+    last_report_id: logs[0]?.id || null,
+    energy_out_kwh: r1(sum(s.map((x) => x.discharge_kwh))),
+    energy_in_kwh: r1(sum(s.map((x) => x.charge_kwh))),
+    discharge_hours: r2(sum(s.map((x) => x.discharge_hours))),
+    vehicle_charges_est: r1(sum(s.map((x) => x.vehicle_sessions_est))),
+    measured_capacity_kwh: r1(avg(s.map((x) => x.measured_capacity_kwh))),
+    full_discharge_hours: r2(avg(s.map((x) => x.full_discharge_hours))),
+    avg_discharge_kw: r1(avg(s.map((x) => x.avg_discharge_kw))),
+    peak_discharge_kw: s.length ? Math.max(...s.map((x) => x.peak_discharge_kw || 0)) || null : null,
+    max_temp_c: s.length ? Math.max(...s.map((x) => x.max_temp_c ?? -99)) : null,
+    max_cell_spread_mv: s.length ? Math.max(...s.map((x) => x.max_cell_spread_mv ?? 0)) : null,
+    charge_restarts: sum(s.map((x) => x.charge_restarts)),
+    soh: latest.soh ?? null,
+    equivalent_full_cycles: latest.equivalent_full_cycles ?? null,
+    lifetime_discharge_kwh: latest.lifetime_discharge_kwh ?? null,
+    hottest_module: topHot ? Number(topHot[0]) : null,
+    hottest_position: topHot ? positionOf(settings, side, Number(topHot[0])) : null,
+    hottest_share: topHot ? r1((topHot[1] / s.length) * 100) : null,
+    latest_warnings: latest.warnings || null,
+    // Average of each module's average temperature across these logs.
+    module_temps: moduleTemps(s),
+  };
+}
+
+function moduleTemps(summaries) {
+  const lists = summaries.map((x) => x.module_temps).filter(Array.isArray);
+  if (!lists.length) return null;
+  const n = Math.max(...lists.map((l) => l.length));
+  return Array.from({ length: n }, (_, i) => r1(avg(lists.map((l) => l[i]))));
+}
+
+// GET /api/bms/fleet?days=30 — every truck, both sides, plus fleet totals.
+router.get('/fleet', anyRole, async (req, res) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const settings = await loadSettings();
+    const systems = settings.fleet.systems;
+    const [trucks, all] = await Promise.all([truckList(), loadSummaries({ settings })]);
+
+    const byHwid = {};
+    for (const row of all) (byHwid[row.hwid || 'unknown'] = byHwid[row.hwid || 'unknown'] || []).push(row);
+
+    const windowLogs = (hwid) => (byHwid[hwid] || []).filter((l) => l.start_time >= since);
+    const slots = trucks.map((t) => ({
+      ...t,
+      sides: Object.fromEntries(SIDES.map((side) => {
+        const hwids = Object.entries(systems).filter(([, v]) => v.truck === t.truck && v.side === side).map(([h]) => h);
+        // More than one serial on the same slot (e.g. a replaced BMS): newest log wins.
+        hwids.sort((a, b) => ((byHwid[b]?.[0]?.start_time || '') > (byHwid[a]?.[0]?.start_time || '') ? 1 : -1));
+        const hwid = hwids[0] || null;
+        const recent = hwid ? windowLogs(hwid) : [];
+        const latestAny = hwid ? byHwid[hwid]?.[0] : null;
+        const stats = hwid ? systemStats(recent, settings, side) : null;
+        return [side, hwid ? {
+          hwid,
+          other_hwids: hwids.slice(1),
+          ...stats,
+          module_temps: stats.module_temps || latestAny?.summary?.module_temps || null,
+          last_log: latestAny?.start_time || null,
+          last_report_id: latestAny?.id || null,
+          soh: latestAny?.summary?.soh ?? null,
+          equivalent_full_cycles: latestAny?.summary?.equivalent_full_cycles ?? null,
+          lifetime_discharge_kwh: latestAny?.summary?.lifetime_discharge_kwh ?? null,
+          latest_warnings: latestAny?.summary?.warnings || null,
+        } : null];
+      })),
+    }));
+
+    for (const t of slots) {
+      const d = t.sides.driver, p = t.sides.passenger;
+      const both = [d, p].filter(Boolean);
+      t.totals = {
+        energy_out_kwh: r1(sum(both.map((x) => x.energy_out_kwh))),
+        measured_capacity_kwh: both.every((x) => x.measured_capacity_kwh != null) && both.length === 2 ? r1(d.measured_capacity_kwh + p.measured_capacity_kwh) : null,
+        vehicle_charges_est: r1(sum(both.map((x) => x.vehicle_charges_est))),
+        passenger_share_pct: d && p && d.energy_out_kwh + p.energy_out_kwh > 0 ? r1((p.energy_out_kwh / (d.energy_out_kwh + p.energy_out_kwh)) * 100) : null,
+        max_temp_diff_c: d && p && d.max_temp_c != null && p.max_temp_c != null ? r1(p.max_temp_c - d.max_temp_c) : null,
+        soh_diff: d && p && d.soh != null && p.soh != null ? r1(p.soh - d.soh) : null,
+      };
+    }
+
+    const assigned = new Set(Object.keys(systems).filter((h) => systems[h].truck != null && systems[h].side));
+    const unassigned = Object.keys(byHwid).filter((h) => h !== 'unknown' && !assigned.has(h)).map((hwid) => ({
+      hwid,
+      logs: byHwid[hwid].length,
+      last_log: byHwid[hwid][0]?.start_time,
+      last_report_id: byHwid[hwid][0]?.id,
+      side: systems[hwid]?.side || null,
+    }));
+
+    const sys = slots.flatMap((t) => SIDES.map((side) => t.sides[side] && { truck: t.truck, name: t.name, side, ...t.sides[side] })).filter(Boolean);
+    const sohs = sys.map((x) => x.soh).filter((v) => v != null).sort((a, b) => a - b);
+    const median = sohs.length ? sohs[Math.floor(sohs.length / 2)] : null;
+    const fleet = {
+      days,
+      systems_assigned: sys.length,
+      systems_reporting: sys.filter((x) => x.logs > 0).length,
+      logs: sum(sys.map((x) => x.logs)),
+      energy_out_kwh: r1(sum(sys.map((x) => x.energy_out_kwh))),
+      vehicle_charges_est: r1(sum(sys.map((x) => x.vehicle_charges_est))),
+      avg_capacity_kwh: r1(avg(sys.map((x) => x.measured_capacity_kwh))),
+      avg_full_discharge_hours: r2(avg(sys.map((x) => x.full_discharge_hours))),
+      median_soh: median,
+      lowest_soh: sys.filter((x) => x.soh != null).sort((a, b) => a.soh - b.soh)[0] || null,
+      hottest: sys.filter((x) => x.max_temp_c != null && x.logs).sort((a, b) => b.max_temp_c - a.max_temp_c)[0] || null,
+      most_cycles: sys.filter((x) => x.equivalent_full_cycles != null).sort((a, b) => b.equivalent_full_cycles - a.equivalent_full_cycles)[0] || null,
+    };
+    for (const k of ['lowest_soh', 'hottest', 'most_cycles']) {
+      const x = fleet[k];
+      if (x) fleet[k] = { truck: x.truck, name: x.name, side: x.side, hwid: x.hwid, soh: x.soh, max_temp_c: x.max_temp_c, equivalent_full_cycles: x.equivalent_full_cycles };
+    }
+
+    res.json({ trucks: slots, unassigned, fleet, layouts: settings.pack.layouts });
+  } catch (err) {
+    console.error('[BMS] Fleet summary failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/bms/systems/:hwid — one battery system: its assignment, all its
+// logs, headline numbers and the day-by-day trend.
+router.get('/systems/:hwid', anyRole, async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    const hwid = req.params.hwid;
+    const assignment = settings.fleet.systems[hwid] || null;
+    const logs = await loadSummaries({ hwid, settings });
+    if (!logs.length) return res.status(404).json({ error: 'No logs for this battery system' });
+    const trucks = await truckList();
+    const truck = assignment?.truck != null ? trucks.find((t) => t.truck === assignment.truck) : null;
+    const since30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    res.json({
+      hwid,
+      assignment,
+      truck_name: truck?.name || (assignment?.truck != null ? `Truck ${assignment.truck}` : null),
+      label: logs[0].label || null,
+      all_time: systemStats(logs, settings, assignment?.side),
+      last_30_days: systemStats(logs.filter((l) => l.start_time >= since30), settings, assignment?.side),
+      trend: buildTrend([...logs].reverse()),
+      layouts: settings.pack.layouts,
+      logs: logs.map((l) => ({ id: l.id, start_time: l.start_time, end_time: l.end_time, file_name: l.file_name, summary: l.summary })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bms/systems/:hwid — body: { truck, side }. Saves which truck and
+// side this BMS serial belongs to; future uploads are recognised automatically.
+router.put('/systems/:hwid', operatorUp, async (req, res) => {
+  const hwid = req.params.hwid;
+  const truck = req.body?.truck == null || req.body.truck === '' ? null : Number(req.body.truck);
+  const side = SIDES.includes(req.body?.side) ? req.body.side : null;
+  if (truck != null && !Number.isFinite(truck)) return res.status(400).json({ error: 'Unknown truck' });
+
+  try {
+    const settings = await loadSettings();
+    const systems = { ...settings.fleet.systems };
+    if (truck == null && !side) delete systems[hwid];
+    else systems[hwid] = { truck, side };
+    // Another serial already on this exact slot? Report it so the page can say so.
+    const clash = Object.entries(systems).filter(([h, v]) => h !== hwid && truck != null && v.truck === truck && v.side === side).map(([h]) => h);
+    const merged = mergeSettings({ ...settings, fleet: { systems }, pack: { ...settings.pack, mounts: {} } });
+    const { error } = await supabase.from('bms_settings').upsert({ id: 1, settings: merged, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
+    res.json({ hwid, assignment: merged.fleet.systems[hwid] || null, also_on_this_slot: clash });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
