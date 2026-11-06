@@ -316,9 +316,12 @@ export const api = {
   },
   // Page change requests (customization requests read by Claude)
   getBmsRequests: () => request('/api/bms/requests'),
-  createBmsRequest: (text) => request('/api/bms/requests', { method: 'POST', body: JSON.stringify({ request: text }) }),
+  createBmsRequest: (text, requesterName) => request('/api/bms/requests', { method: 'POST', body: JSON.stringify({ request: text, requester_name: requesterName }) }),
   interpretBmsRequest: (id) => request(`/api/bms/requests/${id}/interpret`, { method: 'POST' }),
-  applyBmsRequest: (id) => request(`/api/bms/requests/${id}/apply`, { method: 'POST' }),
+  approveBmsRequest: (id, body) => request(`/api/bms/requests/${id}/approve`, { method: 'POST', body: JSON.stringify(body) }),
+  declineBmsRequest: (id, note) => request(`/api/bms/requests/${id}/decline`, { method: 'POST', body: JSON.stringify({ note }) }),
+  getRequestSettings: () => request('/api/bms/request-settings'),
+  saveRequestSettings: (emails) => request('/api/bms/request-settings', { method: 'PUT', body: JSON.stringify({ emails }) }),
   updateBmsRequest: (id, body) => request(`/api/bms/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteBmsRequest: (id) => request(`/api/bms/requests/${id}`, { method: 'DELETE' }),
   // Sends the .xlsx as the raw request body (not JSON) — BMS exports are large.
